@@ -1,6 +1,6 @@
 # Parity harness
 
-Runs one scripted scenario against an origin and returns a JSON report. Diff reports from two origins to check behaviour parity (baseline Solid vs Reze).
+Runs one scripted scenario against an origin and returns a JSON report. Diff reports from two origins to check behaviour parity (baseline the previous framework vs Reze).
 
 Files:
 

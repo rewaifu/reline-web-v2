@@ -254,11 +254,10 @@ const CODE_VIEW = () => {
 const SET_TEXTAREA = (value) => {
   const ta = document.querySelector("[role=tabpanel] textarea");
   if (!ta) return false;
-  const setter = Object.getOwnPropertyDescriptor(
+  Object.getOwnPropertyDescriptor(
     HTMLTextAreaElement.prototype,
     "value",
-  ).set;
-  setter.call(ta, value);
+  ).set.call(ta, value);
   ta.dispatchEvent(new Event("input", { bubbles: true }));
   return true;
 };

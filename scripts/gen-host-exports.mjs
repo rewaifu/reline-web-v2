@@ -16,7 +16,6 @@ const out = {
   "reze-js": await names("reze-js"),
   "reze-js/internal/reactivity": await names("reze-js/internal/reactivity"),
   "reze-js/internal/runtime": await names("reze-js/internal/runtime"),
-  "reze-js/jsx-runtime": await names("reze-js/jsx-runtime"),
 };
 writeFileSync(
   new URL("../sdk/host-exports.json", import.meta.url),

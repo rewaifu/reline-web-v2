@@ -41,7 +41,6 @@ const HOST_MODULES = [
   "reze-js",
   "reze-js/internal/reactivity",
   "reze-js/internal/runtime",
-  "reze-js/jsx-runtime",
 ] as const;
 
 type HostModule = (typeof HOST_MODULES)[number];

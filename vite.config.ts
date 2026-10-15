@@ -27,6 +27,15 @@ export default defineConfig(({ command }) => ({
       diagnostics: { jsonl: "node_modules/.cache/reze-diagnostics.jsonl" },
     }),
   ],
+  optimizeDeps: {
+    // Reze library sources hold compiler syntax: the Reze plugin compiles them,
+    // pre-bundling would feed them to the bundler raw
+    exclude: ["@rebase-ui/reze"],
+    // the dependency scan parses JSX itself, before the Reze plugin runs
+    rolldownOptions: {
+      transform: { jsx: { runtime: "automatic", importSource: "reze-js" } },
+    },
+  },
   server: {
     port: 3000,
   },

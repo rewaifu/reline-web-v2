@@ -89,6 +89,5 @@
     "use",
     "useContext",
     "withReloadScope"
-  ],
-  "reze-js/jsx-runtime": []
+  ]
 }

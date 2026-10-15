@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as internalReactivity from "reze-js/internal/reactivity";
 import * as internalRuntime from "reze-js/internal/runtime";
-import * as jsxRuntime from "reze-js/jsx-runtime";
 import * as reze from "reze-js";
 import hostExports from "./host-exports.json";
 
@@ -22,6 +21,5 @@ describe("sdk host exports", () => {
     expect(hostExports["reze-js/internal/runtime"]).toEqual(
       names(internalRuntime),
     );
-    expect(hostExports["reze-js/jsx-runtime"]).toEqual(names(jsxRuntime));
   });
 });

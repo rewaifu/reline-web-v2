@@ -283,7 +283,7 @@ export default {
 ## Сборка и публикация
 
 - `relinePlugin()` (`sdk/vite.ts`) подменяет импорты `reze-js` на чтение из `globalThis.__RELINE__`
-  (копии редактора: `reze-js`, `reze-js/internal/reactivity`, `reze-js/internal/runtime`, `reze-js/jsx-runtime`)
+  (копии редактора: `reze-js`, `reze-js/internal/reactivity`, `reze-js/internal/runtime`)
   и после сборки пишет `plugin.json` с SHA-384. Список имён лежит в `sdk/host-exports.json`; после обновления Reze:
   `pnpm sdk:exports` (тест `sdk/sdk.test.ts` падает, если список устарел).
 - Собранный плагин нельзя форматировать и править руками: хеш закреплён побайтно

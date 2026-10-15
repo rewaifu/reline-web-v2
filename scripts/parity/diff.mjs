@@ -1,9 +1,5 @@
 // Deep diff of two JSON-serialisable parity reports.
 
-function isPlainObject(v) {
-  return v !== null && typeof v === "object" && !Array.isArray(v);
-}
-
 function typeOf(v) {
   if (v === null) return "null";
   if (Array.isArray(v)) return "array";

@@ -2,7 +2,6 @@ import { root, signal } from "reze-js";
 import * as reze from "reze-js";
 import * as reactivity from "reze-js/internal/reactivity";
 import * as runtime from "reze-js/internal/runtime";
-import * as jsx from "reze-js/jsx-runtime";
 import * as v from "valibot";
 import { storage } from "~/lib/storage";
 import { pipeline } from "~/lib/pipeline/hooks";
@@ -96,7 +95,6 @@ const exposeHost = (): void => {
     "reze-js": reze,
     "reze-js/internal/reactivity": reactivity,
     "reze-js/internal/runtime": runtime,
-    "reze-js/jsx-runtime": jsx,
   };
 };
 exposeHost();

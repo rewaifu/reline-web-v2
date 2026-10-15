@@ -287,7 +287,7 @@ and run inside a `memo`, which cannot wait for a message.
 ## Building and publishing
 
 - `relinePlugin()` (`sdk/vite.ts`) rewrites the `reze-js` imports into reads from `globalThis.__RELINE__`
-  (the editor's copies: `reze-js`, `reze-js/internal/reactivity`, `reze-js/internal/runtime`, `reze-js/jsx-runtime`)
+  (the editor's copies: `reze-js`, `reze-js/internal/reactivity`, `reze-js/internal/runtime`)
   and, after the build, writes `plugin.json` with the SHA-384. The names are in `sdk/host-exports.json`; after a
   Reze update run `pnpm sdk:exports` (`sdk/sdk.test.ts` fails when the list is stale).
 - A built plugin must not be formatted or edited by hand: the hash is pinned byte for byte
