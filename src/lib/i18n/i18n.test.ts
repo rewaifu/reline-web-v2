@@ -1,4 +1,3 @@
-import { flush } from "solid-js";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   locale,
@@ -20,12 +19,7 @@ const flatten = (value: unknown, prefix = ""): [string, string][] => {
   );
 };
 
-/** Solid 2 defers a signal write to the next flush, so a test that reads a
- * message right after switching the language has to flush first. */
-const use = (next: "ru" | "en") => {
-  setLocale(next);
-  flush();
-};
+const use = (next: "ru" | "en") => setLocale(next);
 
 describe("messages", () => {
   beforeEach(() => use("ru"));

@@ -47,6 +47,45 @@ Baseline (main @ e0bf438): `pnpm test` 34 files / 325 tests, `pnpm lint`, `pnpm 
 | destructured props / copy `const x = props.y` | read `props.y` where used; `PROPS_DESTRUCTURED`/`SIGNAL_READ_ONCE` are lint-level errors for us |
 | `onClick` etc. | same camel-case; `[handler, data]` form; `on:name` for custom events |
 
+## Porting rules (contract for every slice)
+
+Order of precedence: these rules, then the idiom map, then the Reze docs (`/media/H/zed2/reze/reze-js/docs/src/routes/*.mdx`).
+
+- **R1 module-level reactive state is private.** `let s = signal(v)` inside the module; the public API keeps its
+  old shape — accessor *functions* (`export const locale = () => current`) and setter functions. Call sites outside the
+  module do not change (`locale()` stays `locale()`); runtime tracking works through plain calls.
+  Exported signals (`export let x = signal()`) only when the consumer is a Reze component and it is clearly simpler.
+- **R2 component-local state**: `let x = signal(v)`, read `x`, write `x = v`. Never `x()` on a signal; never
+  `const copy = props.x` in a body (use `computed(props.x…)` or read in JSX/handlers). No destructured props.
+- **R3 accessor-typed props stay `() => T`** (parent passes `() => value`; child calls `props.x()`).
+- **R4 stores**: `store(v)`; reducers mutate in place (`splice`, `Object.assign(item.options, patch)`, `item.x = …`);
+  survivors are never re-created (uid identity). `Store<T>` type → `T`.
+- **R5 effects**: one function, reads tracked, side effects in `untrack(() => …)` when they must not subscribe,
+  cleanup via `onCleanup` inside. The first run is synchronous at creation: an element that does not exist yet is not
+  readable — keep it in a signal set from `ref={(el) => (node = el)}` and read that signal in the effect, or defer
+  with `queueMicrotask` inside it. There is no `onMount`/`onSettled`.
+- **R6 no halting**: an effect error is thrown out of `flush()`/the microtask and the system keeps running.
+  `Errored` is `catchError` based (render and later binding errors both reach it).
+- **R7 tests**: `@rezejs/testing-library` (`mount`, `cleanup`, `tick`, `settle`, `fire`); `afterEach(cleanup)`; DOM
+  queried with `el.querySelector`. Signal writes are visible at once; DOM/effects need `tick()` (= `flush`). Keep every
+  assertion; only the harness changes. A test file must not rely on another test having run first.
+- **R8 types**: `Component`/`ParentProps` from `~/types/component`; `JSX` from `reze-js`; `Accessor<T>` → `() => T`.
+- **R9 lists**: `<For each={…}>` identity mode (default) for stored arrays of objects (uid identity); never `.map` for
+  stateful rows. `class` takes strings/objects/arrays (no `classList`). Events are camel-case (`onClick`, `onInput`,
+  `onKeyDown`, `onPointerDown`); custom ones `on:name`.
+- **R10 compile check after every file**: `node /tmp/reze-check.mjs <file>` — no error, and no warn of these codes:
+  `SIGNAL_READ_ONCE`, `PROPS_DESTRUCTURED`, `INLINE_EACH`, `KEY_ON_ELEMENT`, `UNKNOWN_ATTRIBUTE`,
+  `EVENT_NAME_LOWERCASE`, `FLOW_PARAM_CALLED`.
+- **R11 clean cutover**: delete Solid workarounds that existed only because writes were deferred
+  (plain-variable mirrors of signals, `flush()` after writes, `ownedWrite`, `untrack` for STRICT_READ warnings,
+  `createEffect(compute, apply)` splits). Keep comments that explain *why* the app behaves as it does; rewrite the
+  ones that explain Solid 2 traps. No TODOs, no stubs.
+- **R12 UI kit**: `@rebase-ui/reze/<part>` mirrors `@rebase-ui/solid/<part>` — same part names. Read
+  `node_modules/@rebase-ui/reze/src/<part>` when unsure. A bug in it that blocks the build is fixed in
+  `patches/@rebase-ui__reze@0.1.2.patch` (via `pnpm patch`), not worked around in app code.
+- Do not run `pnpm build`/`lint`/full `pnpm test` mid-flight; run the compile check and, when its dependencies are
+  already ported, the single test file (`pnpm exec vitest run <file>`). The integrator runs the gates.
+
 ## Phases and tasks
 
 ### P0 Safety net (before any port)

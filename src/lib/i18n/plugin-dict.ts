@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { signal } from "reze-js";
 import { locale, type Locale } from "./locale";
 
 /**
@@ -13,31 +13,30 @@ import { locale, type Locale } from "./locale";
 type Entries = Readonly<Record<string, string>>;
 type PerLocale = Partial<Record<Locale, Entries>>;
 
-// Read straight from the map (a signal write is deferred, and a line added in
-// `activate` is read in the same tick); the signal only tells subscribers to
-// look again. `ownedWrite`: a plugin adds its words from inside its own root.
+// Read straight from the map; the signal only tells subscribers to look again.
 const dictionaries = new Map<string, readonly PerLocale[]>();
-const [revision, setRevision] = createSignal(0, { ownedWrite: true });
+let version = 0;
+let revision = signal(version);
 
 export const pluginDictionary = {
   /** Add words for one language; the disposer takes exactly these back. */
   add(plugin: string, language: Locale, entries: Entries): () => void {
     const layer: PerLocale = { [language]: entries };
     dictionaries.set(plugin, [...(dictionaries.get(plugin) ?? []), layer]);
-    setRevision((n) => n + 1);
+    revision = ++version;
     return () => {
       const layers = (dictionaries.get(plugin) ?? []).filter(
         (l) => l !== layer,
       );
       if (layers.length === 0) dictionaries.delete(plugin);
       else dictionaries.set(plugin, layers);
-      setRevision((n) => n + 1);
+      revision = ++version;
     };
   },
 
   /** The template for a key, in the best language available. Reactive. */
   lookup(plugin: string, key: string): string {
-    revision();
+    void revision;
     const layers = dictionaries.get(plugin) ?? [];
     const find = (language: Locale): string | undefined => {
       // later layers win: a plugin can patch its own words
