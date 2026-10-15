@@ -1,5 +1,5 @@
-import { type Component } from "reze-js";
 import { STORAGE_KEY } from "~/constants";
+import type { Component } from "~/types/component";
 import { t } from "~/lib/i18n";
 import { storage } from "~/lib/storage";
 import styles from "./crash.module.scss";

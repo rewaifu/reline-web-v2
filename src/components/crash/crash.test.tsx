@@ -1,5 +1,6 @@
 import { cleanup, mount, tick } from "@rezejs/testing-library";
-import { signal, type Component } from "reze-js";
+import type { Component } from "~/types/component";
+import { signal } from "reze-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STORAGE_KEY } from "~/constants";
 import { setLocale } from "~/lib/i18n";

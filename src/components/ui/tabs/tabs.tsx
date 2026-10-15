@@ -2,13 +2,13 @@ import {
   For,
   computed,
   effect,
-  omitProps,
+  splitProps,
   onCleanup,
   signal,
   untrack,
-  type Component,
   type JSX,
 } from "reze-js";
+import type { Component } from "~/types/component";
 import { Tabs } from "@rebase-ui/reze/tabs";
 import { render, t, type LocalText } from "~/lib/i18n";
 import { UiSelect } from "../select/select";
@@ -43,7 +43,13 @@ const sameSet = (a: ReadonlySet<number> | undefined, b: ReadonlySet<number>) =>
  * tab list for the roving focus and the panel wiring.
  */
 export const UiTabs: Component<UiTabsProps> = (props) => {
-  const rest = omitProps(props, ["value", "onChange", "tabs", "content", "class"]);
+  const [, rest] = splitProps(props, [
+    "value",
+    "onChange",
+    "tabs",
+    "content",
+    "class",
+  ]);
   // indexes kept on the row; undefined until measured (everything shows)
   let kept = signal<ReadonlySet<number> | undefined>(undefined);
   let strip = signal<HTMLDivElement | undefined>(undefined);

@@ -5,10 +5,10 @@ import {
   computed,
   createUniqueId,
   effect,
-  omitProps,
+  splitProps,
   signal,
-  type Component,
 } from "reze-js";
+import type { Component } from "~/types/component";
 import { Icon } from "../icon";
 import styles from "./combobox.module.scss";
 import { createDismissOnOutside } from "../create-dismiss-on-outside";
@@ -35,7 +35,7 @@ export interface UiComboboxProps {
  * click, chevron) shows the whole list; filtering starts with the first
  * keystroke. Focus stays in the input while the menu is open. */
 export const UiCombobox: Component<UiComboboxProps> = (props) => {
-  const rest = omitProps(props, [
+  const [, rest] = splitProps(props, [
     "onChange",
     "value",
     "items",

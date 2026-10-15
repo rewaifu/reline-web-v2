@@ -1,4 +1,5 @@
-import { For, Show, computed, type Component } from "reze-js";
+import { For, Show, computed } from "reze-js";
+import type { Component } from "~/types/component";
 import { render } from "~/lib/i18n";
 import type { Diagnostic } from "~/lib/pipeline";
 import styles from "./diagnostic-list.module.scss";

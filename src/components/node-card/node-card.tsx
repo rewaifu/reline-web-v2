@@ -43,7 +43,6 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
   const analysis = useContext(AnalysisContext);
   let editing = signal(false);
   let draft = signal("");
-  let renameInput: HTMLInputElement | undefined;
 
   const findings = () => analysis().byUid.get(props.node.uid) ?? [];
   // the worst finding tints the card edge, so a folded card still says so
@@ -154,7 +153,6 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
             fallback={
               <input
                 ref={(el) => {
-                  renameInput = el;
                   // the input mounts on demand: focus and select the text once
                   // it is in the document, so typing replaces the name right away
                   queueMicrotask(() => {
@@ -221,7 +219,9 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
           >
             <Icon
               name={
-                props.node.collapsed === false ? "chevron-down" : "chevron-right"
+                props.node.collapsed === false
+                  ? "chevron-down"
+                  : "chevron-right"
               }
               size={14}
             />

@@ -1,6 +1,6 @@
-import { afterEach, cleanup, mount, tick } from "@rezejs/testing-library";
+import { cleanup, mount, tick } from "@rezejs/testing-library";
 import { store } from "reze-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NodesContext, NodesDispatchContext } from "~/context/contexts";
 import { createNodesDispatch } from "~/context/reducer";
 import { NodesList } from "~/components/nodes-list/nodes-list";
@@ -114,13 +114,12 @@ describe("drop during in-flight flip", () => {
     const nodes = store(createDefaultNodes().slice(0, 3));
     const before = order(nodes);
     const dispatch = createNodesDispatch(nodes);
-    const selected = store<Record<string, boolean>>({});
     const view = mount(() => (
       <NodesContext value={nodes}>
         <NodesDispatchContext value={dispatch}>
           <NodesList
             selectedUid={() => null}
-            isSelected={selected}
+            isSelected={() => false}
             onSelect={() => {}}
           />
         </NodesDispatchContext>

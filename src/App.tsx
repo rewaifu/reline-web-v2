@@ -1,12 +1,5 @@
-import {
-  type Component,
-  computed,
-  effect,
-  onCleanup,
-  signal,
-  store,
-  untrack,
-} from "reze-js";
+import { computed, effect, onCleanup, signal, store, untrack } from "reze-js";
+import type { Component } from "~/types/component";
 import { sanitizeNodes } from "~/lib/node-shape";
 import { storage } from "~/lib/storage";
 import { seedModelNames } from "~/lib/model-db";

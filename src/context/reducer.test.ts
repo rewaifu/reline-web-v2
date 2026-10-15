@@ -38,9 +38,7 @@ const withStore = (
   }) => void,
   seed?: StackNode[],
 ) => {
-  const nodes = store<StackNode[]>(
-    seed ?? [node("u1", -1), node("u2", -5)],
-  );
+  const nodes = store<StackNode[]>(seed ?? [node("u1", -1), node("u2", -5)]);
   fn({ nodes, dispatch: createNodesDispatch(nodes) });
 };
 

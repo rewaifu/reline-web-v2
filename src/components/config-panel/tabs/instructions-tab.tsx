@@ -57,12 +57,8 @@ export interface InstructionsTabProps {
 
 export const InstructionsTab: Component<InstructionsTabProps> = (props) => {
   const nodes = useContext(NodesContext);
-  const node = computed(
-    nodes.find((n) => n.uid === props.selectedUid()),
-  );
-  const def = computed(
-    node ? nodeRegistry.get(node.type) : undefined,
-  );
+  const node = computed(nodes.find((n) => n.uid === props.selectedUid()));
+  const def = computed(node ? nodeRegistry.get(node.type) : undefined);
   const docHtml = computed(renderGuide(def, locale()));
 
   return (

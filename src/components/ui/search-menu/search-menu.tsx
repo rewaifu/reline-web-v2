@@ -1,12 +1,5 @@
-import {
-  For,
-  Portal,
-  Show,
-  computed,
-  createUniqueId,
-  signal,
-  type Component,
-} from "reze-js";
+import { For, Portal, Show, computed, createUniqueId, signal } from "reze-js";
+import type { Component } from "~/types/component";
 import { t } from "~/lib/i18n";
 import { UiIconButton } from "../button/button";
 import { createDismissOnOutside } from "../create-dismiss-on-outside";
@@ -57,9 +50,7 @@ export const UiSearchMenu: Component<UiSearchMenuProps> = (props) => {
     () => inputEl?.focus(),
   );
 
-  const words = computed(
-    query.toLowerCase().split(/\s+/).filter(Boolean),
-  );
+  const words = computed(query.toLowerCase().split(/\s+/).filter(Boolean));
   const visible = computed(
     props.items.filter((item) => {
       const text = item.toLowerCase();

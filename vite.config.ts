@@ -20,7 +20,11 @@ export default defineConfig(({ command }) => ({
       },
     ],
   },
-  plugins: [reze({ diagnostics: { jsonl: "node_modules/.cache/reze-diagnostics.jsonl" } })],
+  plugins: [
+    reze({
+      diagnostics: { jsonl: "node_modules/.cache/reze-diagnostics.jsonl" },
+    }),
+  ],
   server: {
     port: 3000,
   },

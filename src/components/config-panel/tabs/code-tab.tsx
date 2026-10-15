@@ -1,10 +1,4 @@
-import {
-  computed,
-  effect,
-  Show,
-  signal,
-  useContext,
-} from "reze-js";
+import { computed, effect, Show, signal, useContext } from "reze-js";
 import { parse, render } from "sugar-high/core";
 import * as json from "sugar-high/lang/json";
 import { AnalysisContext, NodesDispatchContext } from "~/context/contexts";

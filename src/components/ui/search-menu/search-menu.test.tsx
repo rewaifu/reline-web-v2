@@ -49,7 +49,13 @@ const setup = () => {
     tick();
   };
   const key = (name: string) => {
-    fire(field()!, "keydown", { key: name });
+    field()!.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: name,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
     tick();
   };
   return { onPick, trigger, field, options, open, type, key };

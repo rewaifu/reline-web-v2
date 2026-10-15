@@ -428,7 +428,10 @@ export const PathRow: Component<PathRowProps> = (props) => {
       // not turn that into "." list nothing. `./raws` names the same folder,
       // keeps the same last-segment prefix the server matches on.
       lsClient
-        .ls(value.includes("/") ? value : `./${value}`, source === "weights" ? { ext: WEIGHT_EXTS } : {})
+        .ls(
+          value.includes("/") ? value : `./${value}`,
+          source === "weights" ? { ext: WEIGHT_EXTS } : {},
+        )
         .then((r) => {
           if (stale()) return;
           const listed = new Set(r.dirs);

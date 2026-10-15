@@ -83,7 +83,10 @@ describe("path completion", () => {
     });
     // `source="dirs"` keeps folders only — the file match must not appear
     expect((list as unknown as Element).textContent).toBe("raws/");
-    fire((list as unknown as Element).querySelector("button") as Element, "click");
+    fire(
+      (list as unknown as Element).querySelector("button") as Element,
+      "click",
+    );
     await vi.waitFor(() => expect(input.value).toBe("raws/"));
   });
 

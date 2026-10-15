@@ -4,10 +4,10 @@ import {
   Show,
   createUniqueId,
   onCleanup,
-  omitProps,
+  splitProps,
   signal,
-  type Component,
 } from "reze-js";
+import type { Component } from "~/types/component";
 import { Icon } from "../icon";
 import styles from "./select.module.scss";
 import { createDismissOnOutside } from "../create-dismiss-on-outside";
@@ -40,7 +40,7 @@ export interface UiSelectProps {
  * trigger while the menu is open (roving `aria-activedescendant`); arrows
  * move, Enter commits, Escape closes, printable characters typeahead. */
 export const UiSelect: Component<UiSelectProps> = (props) => {
-  const rest = omitProps(props, [
+  const [, rest] = splitProps(props, [
     "onChange",
     "value",
     "items",

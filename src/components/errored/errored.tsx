@@ -1,4 +1,5 @@
-import { catchError, signal, type Component, type JSX } from "reze-js";
+import { catchError, signal, type JSX } from "reze-js";
+import type { Component } from "~/types/component";
 
 export interface ErroredProps {
   /** Shown in place of `children` once anything built inside throws. */

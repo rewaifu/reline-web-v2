@@ -135,7 +135,9 @@ const processAction = (nodes: StackNode[], action: NodesAction): void => {
       // and legacy files all land here
       // a plugin may migrate what an import carries first (renamed types, old
       // option shapes); the built-in check still runs on whatever it returns
-      const imported = sanitizeNodes(pipeline.apply("import.sanitize", payload));
+      const imported = sanitizeNodes(
+        pipeline.apply("import.sanitize", payload),
+      );
       if (imported.length === 0) break;
       replaceAll(nodes, withFreshUids(imported));
       break;

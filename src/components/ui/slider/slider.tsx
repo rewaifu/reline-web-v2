@@ -1,4 +1,5 @@
-import { omitProps, type Component } from "reze-js";
+import { splitProps } from "reze-js";
+import type { Component } from "~/types/component";
 import styles from "./slider.module.scss";
 
 export interface UiSliderProps {
@@ -16,7 +17,7 @@ export interface UiSliderProps {
  * paints the progress up to the thumb on WebKit (Firefox has
  * ::-moz-range-progress). */
 export const UiSlider: Component<UiSliderProps> = (props) => {
-  const rest = omitProps(props, [
+  const [, rest] = splitProps(props, [
     "onChange",
     "value",
     "min",

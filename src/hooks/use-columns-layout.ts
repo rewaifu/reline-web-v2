@@ -103,9 +103,7 @@ export const createColumnsLayout = () => {
   const setWidth = (side: ResizableSide, width: number) => {
     const next = clamp(Math.round(width), minWidthOf(side), MAX_SIDE_WIDTH);
     layout =
-      side === "left"
-        ? { ...layout, left: next }
-        : { ...layout, right: next };
+      side === "left" ? { ...layout, left: next } : { ...layout, right: next };
   };
 
   /** Show or hide a side panel. The stack stays: it holds the toolbar that
@@ -171,8 +169,7 @@ export const createColumnsLayout = () => {
   const resetWidth = (side: ResizableSide) =>
     setWidth(side, DEFAULT_LAYOUT[side]);
 
-  const visibleColumns = () =>
-    COLUMN_KEYS.filter((key) => !layout.hidden[key]);
+  const visibleColumns = () => COLUMN_KEYS.filter((key) => !layout.hidden[key]);
 
   return {
     layout: () => layout,

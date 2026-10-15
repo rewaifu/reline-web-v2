@@ -228,7 +228,9 @@ export const createRunClient = (): RunClient => {
    * frame, a dead socket, an unconfirmed stop — has to stay readable after the
    * run goes idle, which is when the user looks. */
   const log = (kind: RunMessage["kind"], text: LocalText) => {
-    messages = [...messages, { at: Date.now(), kind, text }].slice(-MAX_MESSAGES);
+    messages = [...messages, { at: Date.now(), kind, text }].slice(
+      -MAX_MESSAGES,
+    );
   };
 
   const closeSocket = () => {
@@ -528,11 +530,7 @@ export const createRunClient = (): RunClient => {
   // forever — start disabled, stop disabled, escape only by reload.
   // A watchdog forces the run back to idle when the stop goes unconfirmed.
   const stop = () => {
-    if (
-      phase !== "running" &&
-      phase !== "connecting" &&
-      phase !== "recovering"
-    )
+    if (phase !== "running" && phase !== "connecting" && phase !== "recovering")
       return;
     if (phase === "connecting" || phase === "recovering") {
       finish("ok", "run.cancelledEarly", true);

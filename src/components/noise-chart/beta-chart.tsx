@@ -1,4 +1,5 @@
-import { computed, type Component } from "reze-js";
+import { computed } from "reze-js";
+import type { Component } from "~/types/component";
 import type { NoiseNodeOptions } from "~/types/options/noise";
 import styles from "./beta-chart.module.scss";
 

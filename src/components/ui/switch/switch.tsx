@@ -1,4 +1,5 @@
-import { omitProps, type Component } from "reze-js";
+import { splitProps } from "reze-js";
+import type { Component } from "~/types/component";
 import { Switch } from "@rebase-ui/reze/switch";
 import styles from "./switch.module.scss";
 
@@ -16,7 +17,7 @@ export interface UiSwitchProps {
 
 /** Toggle switch. */
 export const UiSwitch: Component<UiSwitchProps> = (props) => {
-  const rest = omitProps(props, [
+  const [, rest] = splitProps(props, [
     "checked",
     "onChange",
     "label",

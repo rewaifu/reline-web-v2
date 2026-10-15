@@ -1,5 +1,6 @@
 import { cleanup, mount, tick } from "@rezejs/testing-library";
-import { onCleanup, type Component } from "reze-js";
+import type { Component } from "~/types/component";
+import { onCleanup } from "reze-js";
 import { afterEach, describe, expect, it } from "vitest";
 import { overridable } from "~/components/slot/overridable";
 import type { NodeFormProps } from "~/components/nodes/node-options-form";

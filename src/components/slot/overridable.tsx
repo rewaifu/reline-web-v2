@@ -84,8 +84,7 @@ export const overridable = <I extends OverridableId>(
     };
     // one component per instance: the source re-runs when the override list changes
     const Current = dynamic(
-      () =>
-        resolved() as unknown as Component<Record<string, unknown>>,
+      () => resolved() as unknown as Component<Record<string, unknown>>,
     );
     return <Current {...(props as unknown as Record<string, unknown>)} />;
   };

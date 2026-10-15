@@ -351,7 +351,10 @@ describe("installing and running", () => {
     expect(seen?.ui).toBeUndefined();
     expect(seen?.store).toBeUndefined();
     // the host exposes its own Reze copy to plugin bundles; never a second one
-    const exposed: Record<string, unknown> | undefined = Reflect.get(globalThis, "__RELINE__");
+    const exposed: Record<string, unknown> | undefined = Reflect.get(
+      globalThis,
+      "__RELINE__",
+    );
     expect(exposed?.["reze-js"]).toHaveProperty("render");
   });
 
