@@ -52,7 +52,7 @@ http://localhost:3000/?api=ws://127.0.0.1:8000/run
 | `pnpm dev`            | dev-сервер Vite на порту 3000                                          |
 | `pnpm build`          | статический сайт в `dist/client` (относительные пути: любой хостинг)   |
 | `pnpm serve`          | локально отдать production-сборку                                      |
-| `pnpm lint`           | `oxlint --type-aware --type-check` (с проверкой типов)            |
+| `pnpm lint`           | `oxlint --type-aware --type-check` (с проверкой типов)                 |
 | `pnpm typecheck`      | `tsc --noEmit`                                                         |
 | `pnpm test`           | Vitest (jsdom)                                                         |
 | `pnpm format`         | `oxfmt`                                                                |
@@ -60,7 +60,7 @@ http://localhost:3000/?api=ws://127.0.0.1:8000/run
 | `pnpm plugin:pin`     | опубликовать пример плагина без сборки в `public/plugins/examples/`    |
 | `pnpm plugin:bundle`  | встроить плагины в готовую сборку (ставятся сразу, docs/PLUGINS.ru.md) |
 | `pnpm plugin:catalog` | пересобрать `public/plugins/index.json`                                |
-| `pnpm sdk:exports`    | пересоздать список экспортов Reze, на который опирается SDK плагинов  |
+| `pnpm sdk:exports`    | пересоздать список экспортов Reze, на который опирается SDK плагинов   |
 
 Прежде чем считать правку готовой, запустите `pnpm lint`, `pnpm typecheck`, `pnpm test` и
 `pnpm build`.

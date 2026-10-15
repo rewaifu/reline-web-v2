@@ -318,12 +318,23 @@ export const NodeStack: Component<NodeCardsProps> = (props) => {
   // the list is rebuilt when the chain changes. A row that followed the chain
   // itself would be a binding, and a list of bindings rebuilds every row on any
   // add, move or delete — each card would lose its form state and focus.
-  const cards = (_chain: string) => {
+  // An override is guarded by an `Errored`, which is a binding too, so with one
+  // active every row sits in a `display: contents` element (no layout effect)
+  // to stay a plain node for the list.
+  const cards = (chain: string) => {
     const Card = resolveOverride("NodeCard", NodeCardImpl);
+    const Row: Component<NodeCardProps> =
+      chain === ""
+        ? Card
+        : (rowProps) => (
+            <div style={{ display: "contents" }}>
+              <Card {...rowProps} />
+            </div>
+          );
     return (
       <For each={nodes}>
         {(node, index) => (
-          <Card
+          <Row
             node={node}
             index={index}
             selected={props.isSelected(node.uid)}

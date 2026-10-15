@@ -60,7 +60,7 @@ The migration record is `docs/reze-migration.md` (findings F1–F7).
 `<For each={…}>` keeps a row while its item stays (identity mode; `keyed={fn}` / `keyed={false}` change what the row
 params are: signals or plain). **A row whose value is a function rebuilds every row on any change of the list**:
 `Show`, `dynamic`, a ternary/`&&`, `Errored`, and — in `pnpm dev` only — every component wrapped for HMR. Rows must
-be DOM nodes or arrays of nodes (a fragment of elements is fine). Reactive parts go *inside* an element. A host
+be DOM nodes or arrays of nodes (a fragment of elements is fine). Reactive parts go _inside_ an element. A host
 component that must be overridable at row level uses `resolveOverride` + `overrideKey` and rebuilds the list on
 the key (`NodeStack`). **List/DOM-identity checks run against the production build** (`pnpm build && pnpm serve`).
 

@@ -16,17 +16,16 @@ traps this codebase has hit. Migration history and findings: `docs/reze-migratio
 
 ## Gates (run them before calling anything done)
 
-| Command          | What it is                                                                                                                                                       |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm lint`      | `oxlint --type-aware --type-check` (type-aware: it type-checks test files too, so a failing `tsc` also fails lint)                                              |
-| `pnpm typecheck` | `tsc --noEmit`                                                                                                                                                   |
-| `pnpm format`    | `oxfmt` (house standard; `.oxfmtrc.json` pins printWidth 80)                                                                                                     |
-| `pnpm test`      | vitest: convert round-trip + reducer invariants                                                                                                                  |
-| `pnpm build`     | plain `vite build`; output `dist/client`                                                                                                                         |
+| Command          | What it is                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `pnpm lint`      | `oxlint --type-aware --type-check` (type-aware: it type-checks test files too, so a failing `tsc` also fails lint) |
+| `pnpm typecheck` | `tsc --noEmit`                                                                                                     |
+| `pnpm format`    | `oxfmt` (house standard; `.oxfmtrc.json` pins printWidth 80)                                                       |
+| `pnpm test`      | vitest: convert round-trip + reducer invariants                                                                    |
+| `pnpm build`     | plain `vite build`; output `dist/client`                                                                           |
 
 Compiler diagnostics are not a gate command: the Reze plugin writes them to
 `node_modules/.cache/reze-diagnostics.jsonl` during dev and build (see **Diagnostics workflow**).
-
 
 Package manager: **pnpm 12.3.4**, pinned via `packageManager` in `package.json` (pnpm self-manages that version) —
 install with `pnpm install`, never bun/npm; `bun.lock` and `package-lock.json` must never reappear. pnpm 12 keeps
@@ -115,7 +114,7 @@ never re-fetched from its URL after the hash check. `?plugin=<url>` only opens t
 sight. Pieces:
 
 - **Plugin ABI**: `exposeHost()` (runtime.ts, at module load) sets `globalThis.__RELINE__ = { apiVersion,
-  "reze-js", "reze-js/internal/reactivity", "reze-js/internal/runtime" }`. `relinePlugin()` (`sdk/vite.ts`)
+"reze-js", "reze-js/internal/reactivity", "reze-js/internal/runtime" }`. `relinePlugin()` (`sdk/vite.ts`)
   compiles a plugin with the Reze compiler and rewrites imports of those three specifiers to a shim
   that reads `globalThis.__RELINE__[specifier]` (throws "Reline host not found" when loaded outside Reline).
   A plugin therefore shares the host's reactive graph; a second copy of `reze-js` would not see the host's
