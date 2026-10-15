@@ -52,7 +52,7 @@ http://localhost:3000/?api=ws://127.0.0.1:8000/run
 | `pnpm dev`            | Vite dev server on port 3000                                           |
 | `pnpm build`          | Static site into `dist/client` (relative paths: any static host)       |
 | `pnpm serve`          | Serve the production build locally                                     |
-| `pnpm lint`           | `oxlint --type-aware --type-check` (Solid rules included)              |
+| `pnpm lint`           | `oxlint --type-aware --type-check` (type-aware)              |
 | `pnpm typecheck`      | `tsc --noEmit`                                                         |
 | `pnpm test`           | Vitest (jsdom)                                                         |
 | `pnpm format`         | `oxfmt`                                                                |
@@ -60,7 +60,7 @@ http://localhost:3000/?api=ws://127.0.0.1:8000/run
 | `pnpm plugin:pin`     | Publish the no-build example plugin to `public/plugins/examples/`      |
 | `pnpm plugin:bundle`  | Embed plugins into a built site (preinstalled, see docs/PLUGINS.en.md) |
 | `pnpm plugin:catalog` | Rebuild `public/plugins/index.json`                                    |
-| `pnpm sdk:exports`    | Regenerate the Solid export list the plugin SDK relies on              |
+| `pnpm sdk:exports`    | Regenerate the Reze export list the plugin SDK relies on              |
 
 Before calling a change done, run `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build`.
 
@@ -144,7 +144,7 @@ AGENTS.md                    instructions for AI agents working on the repo
 ## For contributors and AI agents
 
 [AGENTS.md](AGENTS.md) lists the commands, the architecture invariants that are easy to break (node
-identity, deferred writes in Solid 2, the plugin boundary) and the project skills in `.omp/skills/`.
+identity, the Reze list/effect traps, the plugin boundary) and the project skills in `.omp/skills/`.
 
 ## License
 

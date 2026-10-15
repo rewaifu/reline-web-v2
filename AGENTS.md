@@ -7,8 +7,8 @@ matching one **before** touching its area.
 ## What this is
 
 A static single-page editor for Reline image-processing pipelines: a stack of nodes edited as JSON,
-validated, and run on a Python runner over WebSocket ([WS_API.md](WS_API.md)). Solid **2.0-rc.6**
-(not 1.x), SCSS modules, Vite 8, pnpm 12, Node ≥ 24. A plugin system lets users install extensions by
+validated, and run on a Python runner over WebSocket ([WS_API.md](WS_API.md)). Reze (`reze-js` 0.1,
+compiled by `@rezejs/vite-plugin`; UI primitives `@rebase-ui/reze`), SCSS modules, Vite 8, pnpm 12, Node ≥ 24. A plugin system lets users install extensions by
 link ([docs/PLUGINS.en.md](docs/PLUGINS.en.md)).
 
 Talk to the user in the language they write in (they write Russian). Be terse: facts, decisions,
@@ -21,8 +21,7 @@ evidence. Final answer: what changed, how it was verified, what remains.
 | `reline-web`           | editing `src/**`: store/reducer, WebSocket, persistence, layout, phones, plugins runtime, UI verification. The canonical project rules.  |
 | `reline-plugin-author` | writing, reviewing or debugging a plugin (`examples/`, `public/plugins/`, `sdk/`): the plugin API, manifest, hooks, pitfalls, checklist. |
 | `layout-verification`  | any UI/SCSS layout change (flex/grid, overflow, pagers) — measure in a browser, do not eyeball.                                          |
-| `solid-js-patterns`    | Solid reactivity questions; `reline-web` records the project-specific traps.                                                             |
-| `kobalte-primitives`   | importing or styling Kobalte parts.                                                                                                      |
+| `reze-patterns`        | any reactive code, lists, refs, children, library components, tests: the Reze idioms and the traps this repo hit.                        |
 
 ## Commands and gates
 
@@ -38,7 +37,7 @@ pnpm plugin:build        # build examples/sequence and regenerate public/plugins
 pnpm plugin:pin          # publish examples/writer-suffix to public/plugins/examples/
 pnpm plugin:bundle <site> <plugin-dir>...   # embed plugins into a built site (Tauri, company builds)
 pnpm plugin:catalog      # regenerate the catalog only
-pnpm sdk:exports         # regenerate sdk/host-exports.json after a Solid update
+pnpm sdk:exports         # regenerate sdk/host-exports.json after a reze-js update
 ```
 
 A change is done only when `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` pass and the
@@ -64,14 +63,19 @@ Never `pkill -f`. Never start a second dev server without checking the first one
 - Colours, spacing, radii come from `src/styles/_tokens.scss` tokens. Icon-only buttons need
   `aria-label` + `title`. Touch targets use `--touch-min`.
 
-**Solid 2 traps** (details in `reline-web`)
+**Reze traps** (details in `reze-patterns`)
 
-- Signal writes are deferred: reading right after a write returns the old value (`flush()` in
-  tests). Effects are split: `createEffect(compute, apply)`; read reactive values in `compute`, use
-  `untrack` in `apply`. `onCleanup` is not allowed inside `onSettled`; a callback passed to
-  `onSettled` must not return a value. Component bodies read props untracked.
-- An uncaught error inside an effect halts the whole reactive system; keep effect bodies safe.
-- `For` gives the item as a plain value and the index as an accessor.
+- `signal`/`computed` are compiler syntax: read by name, write by assignment, declared with `let`/`const`
+  in a variable declaration. Module state stays private behind accessor functions. A component body runs
+  once; never destructure props.
+- `effect` runs its first pass at creation, before the JSX below it exists: keep elements in a signal via a
+  `ref` callback. There is no `onMount`.
+- A `<For>` row whose value is a function (`Show`, `dynamic`, ternary, `Errored`) makes every row rebuild
+  on any list change; rows are elements/fragments of elements. Check list identity on the production
+  build, not `pnpm dev` (HMR wraps components).
+- `@rebase-ui/reze` reads `props.children` once: wrap a reactive child in a fragment.
+- An effect error drops the rest of that flush until the next write; the page is not halted. The watchdog
+  still guards a stuck DOM.
 
 **Data model**
 
@@ -99,7 +103,7 @@ cached in `reline-web:mdb:v2` for 6 h). The page never dials the runner just to 
 
 Layout changes must be verified in a real browser with measured geometry (overflow, widths): desktop
 1400 px, stacked ≈ 800 px, phone 390 and 320 px with `isMobile` + `hasTouch`. Clear
-`reline-web:layout:v2` in `localStorage` before layout sweeps (the layout is persisted). Kobalte
+`reline-web:layout:v2` in `localStorage` before layout sweeps (the layout is persisted). Base UI
 controls need dispatched pointer events, not bare `click()`. Capture console `warn` **and** `error`
 (puppeteer names `console.warn` `warn`). Phone rules: `PHONE_QUERY` has the same text in
 `workspace.tsx` and `workspace.module.scss`; a phone shows two panels (stack, settings) with a bottom
