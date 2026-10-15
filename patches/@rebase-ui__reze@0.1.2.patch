@@ -1,0 +1,495 @@
+diff --git a/src/accordion/item/AccordionItem.tsx b/src/accordion/item/AccordionItem.tsx
+index 51d943827174d981ecde57b9d9c91fdaadfab082..233c364c9f88dbe1b451d79556bc53645e9eacf8 100755
+--- a/src/accordion/item/AccordionItem.tsx
++++ b/src/accordion/item/AccordionItem.tsx
+@@ -105,7 +105,7 @@ export function AccordionItem<T extends JSX.ElementType = "div">(props: Accordio
+     setTriggerId,
+   };
+ 
+-  const ref = mergeRefs(listItem.ref, props.ref as ((element: HTMLElement | null) => void) | undefined);
++  let ref = mergeRefs(listItem.ref, props.ref as ((element: HTMLElement | null) => void) | undefined);
+ 
+   const Tag = dynamicElement<JSX.ElementType>(() => props.as ?? "div");
+ 
+diff --git a/src/checkbox/root/CheckboxRoot.tsx b/src/checkbox/root/CheckboxRoot.tsx
+index 87d74c1137377b8aaae6a0e0c3b161141d987e23..d9c57b1d7a1077ba4e57b7769f197be4d369931c 100755
+--- a/src/checkbox/root/CheckboxRoot.tsx
++++ b/src/checkbox/root/CheckboxRoot.tsx
+@@ -470,7 +470,7 @@ export function CheckboxRoot<T extends JSX.ElementType = "span">(props: Checkbox
+     }
+   }
+ 
+-  const ref = mergeRefs(
++  let ref = mergeRefs(
+     button.buttonRef,
+     (element: HTMLElement | null) => {
+       controlElement = element;
+diff --git a/src/combobox/root/AriaCombobox.tsx b/src/combobox/root/AriaCombobox.tsx
+index b8906f231dd900a4ba651811b99a84cf58716c1c..aa680a91120fa1786ce6df3dba59b3f11d365676 100755
+--- a/src/combobox/root/AriaCombobox.tsx
++++ b/src/combobox/root/AriaCombobox.tsx
+@@ -119,7 +119,7 @@ export function AriaCombobox<Value = any, Mode extends SelectionMode = "none", I
+     });
+   }
+ 
+-  const mergedInputRef = mergeRefs(
++  let mergedInputRef = mergeRefs(
+     untrack(() => props.inputRef),
+     (element: HTMLInputElement) => {
+       field.validation.inputElement = element;
+diff --git a/src/drawer/indent/DrawerIndent.tsx b/src/drawer/indent/DrawerIndent.tsx
+index f98885f9d725fa2a3f0b3d3c1beb15a43d57d15c..e6c4a5827e3c21e23ba8986791ae5cbb4293351e 100755
+--- a/src/drawer/indent/DrawerIndent.tsx
++++ b/src/drawer/indent/DrawerIndent.tsx
+@@ -53,7 +53,7 @@ export function DrawerIndent<T extends JSX.ElementType = "div">(props: DrawerInd
+ 
+   // The subscription lives in the ref callback (rather than an effect) so it
+   // attaches exactly when the element mounts, regardless of effect timing.
+-  const ref = mergeRefs(
++  let ref = mergeRefs(
+     (element: HTMLElement | null) => {
+       teardownVisualState(element as HTMLDivElement | null);
+       if (element !== null && visualStateStore) {
+diff --git a/src/field/control/FieldControl.tsx b/src/field/control/FieldControl.tsx
+index f944f67052eb5f12398729f1b637eb7199ccda0f..0aa7719af5d6edfcf56e3d659c038319af3cf7e2 100755
+--- a/src/field/control/FieldControl.tsx
++++ b/src/field/control/FieldControl.tsx
+@@ -101,7 +101,7 @@ export function FieldControl<T extends JSX.ElementType = "input">(props: FieldCo
+     untrack(() => syncValueFromProps(valueProp, defaultValueProp));
+   });
+ 
+-  const ref = mergeRefs(
++  let ref = mergeRefs(
+     (element: HTMLElement | null) => {
+       inputElement = element;
+       validation.inputElement = element as HTMLInputElement | null;
+diff --git a/src/filter-dropdown/input/FilterDropdownInput.tsx b/src/filter-dropdown/input/FilterDropdownInput.tsx
+index 609e349ecc77f02ce1c035cd5771bf0ea16a29fe..cc30e0d2d891c01e264cf3101211d2b2423c021a 100755
+--- a/src/filter-dropdown/input/FilterDropdownInput.tsx
++++ b/src/filter-dropdown/input/FilterDropdownInput.tsx
+@@ -163,7 +163,7 @@ export function FilterDropdownInput<T extends JSX.ElementType = "input">(props:
+     navigationHandler("onBlur")?.(event as never);
+   }
+ 
+-  const ref = mergeRefs(
++  let ref = mergeRefs(
+     (element: HTMLInputElement | null) => {
+       context.focusOwnerRef.current = element;
+     },
+diff --git a/src/filter-dropdown/list/FilterDropdownList.tsx b/src/filter-dropdown/list/FilterDropdownList.tsx
+index 680a37038ad3885ad1c06a3ec698bfb533533dd4..f7f109738f2ec1b2520159a0d9d6bd5dbaa8b5a7 100755
+--- a/src/filter-dropdown/list/FilterDropdownList.tsx
++++ b/src/filter-dropdown/list/FilterDropdownList.tsx
+@@ -46,7 +46,7 @@ export function FilterDropdownList<T extends JSX.ElementType = "div">(props: Fil
+     context.setKeyboardModality(false);
+   }
+ 
+-  const ref = mergeRefs(props.ref as ((element: HTMLElement | null) => void) | undefined, (element: HTMLElement | null) => {
++  let ref = mergeRefs(props.ref as ((element: HTMLElement | null) => void) | undefined, (element: HTMLElement | null) => {
+     registerIdRef(element);
+   });
+ 
+diff --git a/src/internals/floating/components/FloatingFocusManager.tsx b/src/internals/floating/components/FloatingFocusManager.tsx
+index 3767e61f016005b8884d4359b9db51fe3c1c84bb..5999969344691d9aaa085fc4bb677e4bdca7b8da 100755
+--- a/src/internals/floating/components/FloatingFocusManager.tsx
++++ b/src/internals/floating/components/FloatingFocusManager.tsx
+@@ -424,7 +424,7 @@ export function FloatingFocusManager(props: FloatingFocusManagerProps): JSX.Elem
+ 
+   const getResolvedInsideElements = () => props.getInsideElements?.().filter((element): element is Element => element != null) ?? [];
+ 
+-  const setBeforeGuard = (element: HTMLSpanElement | null) => {
++  let setBeforeGuard = (element: HTMLSpanElement | null) => {
+     beforeGuard = element;
+     const external = props.beforeContentFocusGuardRef;
+     if (typeof external === "function") {
+@@ -437,7 +437,7 @@ export function FloatingFocusManager(props: FloatingFocusManagerProps): JSX.Elem
+     }
+   };
+ 
+-  const setAfterGuard = (element: HTMLSpanElement | null) => {
++  let setAfterGuard = (element: HTMLSpanElement | null) => {
+     afterGuard = element;
+     if (portalContext) {
+       portalContext.afterInsideRef.current = element;
+diff --git a/src/internals/floating/components/FloatingPortal.tsx b/src/internals/floating/components/FloatingPortal.tsx
+index 261e62645e64ee20d0cf5feb3c9f95d956cd406d..7f55abb55541780303f21b0323677867ab5637bd 100755
+--- a/src/internals/floating/components/FloatingPortal.tsx
++++ b/src/internals/floating/components/FloatingPortal.tsx
+@@ -200,7 +200,7 @@ export function FloatingPortal<T extends JSX.ElementType = "div">(props: Floatin
+     }
+   };
+ 
+-  const refProp =
++  let refProp =
+     typeof externalRef === "function"
+       ? mergeRefs<HTMLDivElement>(externalRef as (element: HTMLDivElement) => void, setPortalNodeRef)
+       : setPortalNodeRef;
+diff --git a/src/number-field/input/NumberFieldInput.tsx b/src/number-field/input/NumberFieldInput.tsx
+index 79d52e2bc9e1f909a05fb75fa2bb6a7f662794bb..7d2f181842c4ae4a01dbd3f818e7ce61d34f893a 100755
+--- a/src/number-field/input/NumberFieldInput.tsx
++++ b/src/number-field/input/NumberFieldInput.tsx
+@@ -133,7 +133,7 @@ export function NumberFieldInput<T extends JSX.ElementType = "input">(props: Num
+     store.setInputElement(element);
+   }
+ 
+-  const ref = mergeRefs(props.ref as ((element: HTMLInputElement | null) => void) | undefined, setInputRef);
++  let ref = mergeRefs(props.ref as ((element: HTMLInputElement | null) => void) | undefined, setInputRef);
+ 
+   const externalValidationProps: Record<string, any> = {};
+   Object.defineProperty(externalValidationProps, "aria-describedby", {
+diff --git a/src/number-field/root/NumberFieldRoot.tsx b/src/number-field/root/NumberFieldRoot.tsx
+index b1506819e834419221ad9bffe23a0382d9263b5f..c1a36d40b0a5c1521ebc5334b85949d36b01c524 100755
+--- a/src/number-field/root/NumberFieldRoot.tsx
++++ b/src/number-field/root/NumberFieldRoot.tsx
+@@ -518,7 +518,7 @@ export function NumberFieldRoot<T extends JSX.ElementType = "div">(props: Number
+     }
+   }
+ 
+-  const hiddenRef = mergeRefs(props.inputRef as ((element: HTMLInputElement | null) => void) | undefined, registerHiddenInput);
++  let hiddenRef = mergeRefs(props.inputRef as ((element: HTMLInputElement | null) => void) | undefined, registerHiddenInput);
+ 
+   const hiddenValidationProps = validation.getValidationProps(disabled, {});
+ 
+diff --git a/src/number-field/scrub-area-cursor/NumberFieldScrubAreaCursor.tsx b/src/number-field/scrub-area-cursor/NumberFieldScrubAreaCursor.tsx
+index 5615d307cf1c4ce6e18eb39e7bc0ffb1f90dd607..7d85383d3c47cab3dadd959dd6ce37fb92909009 100755
+--- a/src/number-field/scrub-area-cursor/NumberFieldScrubAreaCursor.tsx
++++ b/src/number-field/scrub-area-cursor/NumberFieldScrubAreaCursor.tsx
+@@ -40,7 +40,7 @@ export function NumberFieldScrubAreaCursor<T extends JSX.ElementType = "span">(p
+     return isScrubbing() && !isWebKit() && !isTouchInput() && !isPointerLockDenied();
+   }
+ 
+-  const ref = mergeRefs(props.ref as ((element: HTMLElement | null) => void) | undefined, (element: HTMLElement | null) => {
++  let ref = mergeRefs(props.ref as ((element: HTMLElement | null) => void) | undefined, (element: HTMLElement | null) => {
+     setScrubAreaCursorElement(element as HTMLSpanElement | null);
+   });
+ 
+diff --git a/src/otp-field/input/OTPFieldInput.tsx b/src/otp-field/input/OTPFieldInput.tsx
+index d1277478024defcf278ec64f9478f4d0233fdc99..1b87e37ae14642c1b8c05116ef2d5a4a1f72ce81 100755
+--- a/src/otp-field/input/OTPFieldInput.tsx
++++ b/src/otp-field/input/OTPFieldInput.tsx
+@@ -401,7 +401,7 @@ export function OTPFieldInput<T extends JSX.ElementType = "input">(props: OTPFie
+     context.handleInputBlur(event);
+   }
+ 
+-  const ref = mergeRefs(listItemRef, props.ref as ((element: HTMLElement | null) => void) | undefined, (element: HTMLElement | null) => {
++  let ref = mergeRefs(listItemRef, props.ref as ((element: HTMLElement | null) => void) | undefined, (element: HTMLElement | null) => {
+     inputElement = element as HTMLInputElement | null;
+   });
+ 
+diff --git a/src/otp-field/root/OTPFieldRoot.tsx b/src/otp-field/root/OTPFieldRoot.tsx
+index 969b94bbc2fb1c26dbaa6d441acbf8dc02a020a2..e1ec5e656f9f7e8ba1ecff0bbacf5f3057061e4b 100755
+--- a/src/otp-field/root/OTPFieldRoot.tsx
++++ b/src/otp-field/root/OTPFieldRoot.tsx
+@@ -446,7 +446,7 @@ export function OTPFieldRoot<T extends JSX.ElementType = "div">(props: OTPFieldR
+     return getOTPFieldStateSnapshot(state);
+   }
+ 
+-  const ref = mergeRefs(props.ref as ((element: HTMLElement | null) => void) | undefined, (element: HTMLElement | null) => {
++  let ref = mergeRefs(props.ref as ((element: HTMLElement | null) => void) | undefined, (element: HTMLElement | null) => {
+     rootElement = element;
+   });
+ 
+diff --git a/src/preview-card/trigger/PreviewCardTrigger.tsx b/src/preview-card/trigger/PreviewCardTrigger.tsx
+index b740d57e4bbca508db2d06f80670e1bc7f949ee7..e7d82b45a855d2ca06e0d0b559882e5d54d75c41 100755
+--- a/src/preview-card/trigger/PreviewCardTrigger.tsx
++++ b/src/preview-card/trigger/PreviewCardTrigger.tsx
+@@ -201,7 +201,7 @@ export function PreviewCardTrigger<Payload = unknown, T extends JSX.ElementType
+     }
+   }
+ 
+-  const elementRef = mergeRefs(setTriggerElement, props.ref as ((element: Element | null) => void) | undefined);
++  let elementRef = mergeRefs(setTriggerElement, props.ref as ((element: Element | null) => void) | undefined);
+ 
+   // `as` is resolved once (matching the Solid layer, where it is untracked): a dynamic element
+   // re-creates its DOM node whenever a sibling mounts or unmounts, which would drop the
+diff --git a/src/radio/root/RadioRoot.tsx b/src/radio/root/RadioRoot.tsx
+index db07d8196437980fab4b74ff176d33254641802b..9e1664d15d03ceffbbfdb2005bab3e00689147bf 100755
+--- a/src/radio/root/RadioRoot.tsx
++++ b/src/radio/root/RadioRoot.tsx
+@@ -95,7 +95,7 @@ export function RadioRoot<Value, T extends JSX.ElementType = "span">(props: Radi
+ 
+   const validation = groupContext?.validation ?? field.validation;
+ 
+-  const mergedInputRef = mergeRefs(
++  let mergedInputRef = mergeRefs(
+     (element: HTMLInputElement | null) => {
+       if (element !== null) {
+         props.inputRef?.(element);
+@@ -314,7 +314,7 @@ export function RadioRoot<Value, T extends JSX.ElementType = "span">(props: Radi
+   const validationProps = validation.getValidationProps(disabled, externalValidationProps);
+ 
+   let unregisterItem: (() => void) | undefined;
+-  const rootRef = mergeRefs(
++  let rootRef = mergeRefs(
+     button.buttonRef,
+     (element: HTMLElement | null) => {
+       radioElement = element;
+diff --git a/src/radio-group/RadioGroup.tsx b/src/radio-group/RadioGroup.tsx
+index 2565e77e004594edefded6af103bce4408db1897..d4b2acf65172e7bd671cb01fac3cfb28ccbcddb3 100755
+--- a/src/radio-group/RadioGroup.tsx
++++ b/src/radio-group/RadioGroup.tsx
+@@ -369,7 +369,7 @@ export function RadioGroup<Value, T extends JSX.ElementType = "div">(props: Radi
+     }
+   }
+ 
+-  const ref = mergeRefs(
++  let ref = mergeRefs(
+     (element: HTMLElement | null) => {
+       if (groupElement && element !== groupElement) {
+         groupElement.removeEventListener("focusout", handleFocusOut);
+diff --git a/src/select/root/SelectRoot.tsx b/src/select/root/SelectRoot.tsx
+index 2aa5bb958b51d2a5297202fd463e4f5d861c4b82..634b8ff6fa78057d127fd0d256dae13d4e7b9472 100755
+--- a/src/select/root/SelectRoot.tsx
++++ b/src/select/root/SelectRoot.tsx
+@@ -62,7 +62,7 @@ export function SelectRoot<Value, Multiple extends boolean | undefined = false>(
+     });
+   }
+ 
+-  const mergedInputRef = mergeRefs(
++  let mergedInputRef = mergeRefs(
+     untrack(() => props.inputRef),
+     (element: HTMLInputElement) => {
+       field.validation.inputElement = element;
+diff --git a/src/slider/control/SliderControl.tsx b/src/slider/control/SliderControl.tsx
+index e4f8c9346bf1ee968b3af1324d56890fb2e323cb..2f8382405a709451fb00982bf3fd9d46069e8e85 100755
+--- a/src/slider/control/SliderControl.tsx
++++ b/src/slider/control/SliderControl.tsx
+@@ -578,7 +578,7 @@ export function SliderControl<T extends JSX.ElementType = "div">(props: SliderCo
+     }
+   }
+ 
+-  const ref = mergeRefs(handleControlRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
++  let ref = mergeRefs(handleControlRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
+ 
+   const Tag = dynamicElement<JSX.ElementType>(() => props.as ?? "div");
+ 
+diff --git a/src/slider/root/SliderRoot.tsx b/src/slider/root/SliderRoot.tsx
+index 37a2d828a10279f03e880c10d8865f372c952eeb..160a680439a9323a5a4e420cc060e9dd436e577d 100755
+--- a/src/slider/root/SliderRoot.tsx
++++ b/src/slider/root/SliderRoot.tsx
+@@ -464,7 +464,7 @@ export function SliderRoot<Value extends number | readonly number[], T extends J
+   });
+   const validationProps = validation.getValidationProps(disabled, externalValidationProps);
+ 
+-  const ref = mergeRefs(setSliderRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
++  let ref = mergeRefs(setSliderRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
+ 
+   const Tag = dynamicElement<JSX.ElementType>(() => props.as ?? "div");
+ 
+diff --git a/src/slider/thumb/SliderThumb.tsx b/src/slider/thumb/SliderThumb.tsx
+index d338beba1d806b901da744a0ce6b401ed71d5d06..4e6c185ec303633a3a65cd3f4592dfe9bb2631eb 100755
+--- a/src/slider/thumb/SliderThumb.tsx
++++ b/src/slider/thumb/SliderThumb.tsx
+@@ -490,7 +490,7 @@ export function SliderThumb<T extends JSX.ElementType = "div">(props: SliderThum
+     handleThumbPointerDown(event);
+   }
+ 
+-  const mergedInputRef = mergeRefs(
++  let mergedInputRef = mergeRefs(
+     (element: HTMLInputElement | null) => {
+       inputElement = element;
+       if (element) {
+@@ -537,7 +537,7 @@ export function SliderThumb<T extends JSX.ElementType = "div">(props: SliderThum
+     listItemRef(element);
+   }
+ 
+-  const ref = mergeRefs(handleThumbRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
++  let ref = mergeRefs(handleThumbRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
+ 
+   const Tag = dynamicElement<JSX.ElementType>(() => props.as ?? "div");
+ 
+diff --git a/src/switch/root/SwitchRoot.tsx b/src/switch/root/SwitchRoot.tsx
+index 7e16ef352d5351c411bae8a3abd955589748f2bc..5ec0a22fbe3f28f4e894103d1e01f0ff5b49673b 100755
+--- a/src/switch/root/SwitchRoot.tsx
++++ b/src/switch/root/SwitchRoot.tsx
+@@ -318,7 +318,7 @@ export function SwitchRoot<T extends JSX.ElementType = "span">(props: SwitchRoot
+     setCheckedState(nextChecked);
+   }
+ 
+-  const ref = mergeRefs(
++  let ref = mergeRefs(
+     button.buttonRef,
+     (element: HTMLElement | null) => {
+       controlElement = element;
+diff --git a/src/tabs/list/TabsList.tsx b/src/tabs/list/TabsList.tsx
+index 2d361c0e3f17d1c9fdbc57b469cc08f908476798..bea93cf1e0753d4aa0650fa846a3af3bb199de3c 100755
+--- a/src/tabs/list/TabsList.tsx
++++ b/src/tabs/list/TabsList.tsx
+@@ -163,7 +163,7 @@ export function TabsList<T extends JSX.ElementType = "div">(props: TabsList.Prop
+ 
+   const Tag = dynamicElement<JSX.ElementType>(() => props.as ?? "div");
+ 
+-  const ref = mergeRefs(compositeRootRef, setTabsListElement, props.ref as ((element: HTMLElement | null) => void) | undefined);
++  let ref = mergeRefs(compositeRootRef, setTabsListElement, props.ref as ((element: HTMLElement | null) => void) | undefined);
+ 
+   // The providers live inside the tag: context does not flow through dynamicElement,
+   // so providing above it would leave the tabs parts without context. Children
+diff --git a/src/tabs/panel/TabsPanel.tsx b/src/tabs/panel/TabsPanel.tsx
+index 23acf42cc8d5475e729d3063708697fd38d95da0..a366d57c025f6857c56c07110c675c5c1ae7f2b7 100755
+--- a/src/tabs/panel/TabsPanel.tsx
++++ b/src/tabs/panel/TabsPanel.tsx
+@@ -119,7 +119,7 @@ export function TabsPanel<T extends JSX.ElementType = "div">(props: TabsPanel.Pr
+ 
+   const Tag = dynamicElement<JSX.ElementType>(() => props.as ?? "div");
+ 
+-  const ref = mergeRefs(setPanelElement, props.ref as ((element: HTMLElement | null) => void) | undefined);
++  let ref = mergeRefs(setPanelElement, props.ref as ((element: HTMLElement | null) => void) | undefined);
+ 
+   // `as` is resolved once: a dynamic element re-creates its DOM node whenever a sibling mounts
+   // or unmounts, which would drop the panel's state and listeners. The default path renders a
+diff --git a/src/tabs/tab/TabsTab.tsx b/src/tabs/tab/TabsTab.tsx
+index 86aaf79115cbc6b8b9e4a135359bdf34dad438b6..b2a2583e8b579a4a610a88b8ada8f6abe3a7178e 100755
+--- a/src/tabs/tab/TabsTab.tsx
++++ b/src/tabs/tab/TabsTab.tsx
+@@ -221,7 +221,7 @@ export function TabsTab<T extends JSX.ElementType = "button">(props: TabsTab.Pro
+     unobserveTabElement?.();
+   });
+ 
+-  const ref = mergeRefs(
++  let ref = mergeRefs(
+     button.buttonRef,
+     composite?.compositeRef,
+     observeTabElement,
+diff --git a/src/toast/arrow/ToastArrow.tsx b/src/toast/arrow/ToastArrow.tsx
+index 36e078f8cc5216ab0b95d96c716df36d137446f9..e0042b00f22e8b87b09af728253b1dc99d2e2ab5 100755
+--- a/src/toast/arrow/ToastArrow.tsx
++++ b/src/toast/arrow/ToastArrow.tsx
+@@ -25,7 +25,7 @@ export function ToastArrow<T extends JSX.ElementType = "div">(props: ToastArrow.
+     return { side: side(), align: align(), uncentered: arrowUncentered() };
+   }
+ 
+-  const ref = mergeRefs(
++  let ref = mergeRefs(
+     (element: Element | null) => {
+       arrowRef.current = element;
+     },
+diff --git a/src/toast/content/ToastContent.tsx b/src/toast/content/ToastContent.tsx
+index c2b80246c076df77c5495ea93c38ae2583d793d8..ea3a781ed000d8e378056a15c8f49bb591bbfb1f 100755
+--- a/src/toast/content/ToastContent.tsx
++++ b/src/toast/content/ToastContent.tsx
+@@ -61,7 +61,7 @@ export function ToastContent<T extends JSX.ElementType = "div">(props: ToastCont
+     return { expanded: expanded(), behind: visibleIndex() > 0 };
+   }
+ 
+-  const ref = mergeRefs(handleRef, props.ref as ((element: HTMLDivElement | null) => void) | undefined);
++  let ref = mergeRefs(handleRef, props.ref as ((element: HTMLDivElement | null) => void) | undefined);
+ 
+   // `as` is resolved once: a dynamic element re-creates its DOM node whenever a
+   // sibling mounts or unmounts. The default path renders a static `<div>` so toast
+diff --git a/src/toast/positioner/ToastPositioner.tsx b/src/toast/positioner/ToastPositioner.tsx
+index 44df37448dfa4eb38acdae827540fa552ac46215..f9908ee5965400ff58550401627e0f3fb012965a 100755
+--- a/src/toast/positioner/ToastPositioner.tsx
++++ b/src/toast/positioner/ToastPositioner.tsx
+@@ -117,7 +117,7 @@ export function ToastPositioner<T extends JSX.ElementType = "div">(props: ToastP
+ 
+   const Tag = dynamicElement<JSX.ElementType>(() => props.as ?? "div");
+ 
+-  const ref = mergeRefs(
++  let ref = mergeRefs(
+     (element: HTMLElement | null) => {
+       positioning.refs.setFloating(element);
+     },
+diff --git a/src/toast/root/ToastRoot.tsx b/src/toast/root/ToastRoot.tsx
+index 067b642cd7dd6b53e8a47a665261e30495916899..6fe25fa64745bbdf5470189aa875e5f007d72b09 100755
+--- a/src/toast/root/ToastRoot.tsx
++++ b/src/toast/root/ToastRoot.tsx
+@@ -593,7 +593,7 @@ export function ToastRoot<T extends JSX.ElementType = "div">(props: ToastRoot.Pr
+ 
+   const Tag = dynamicElement<JSX.ElementType>(() => props.as ?? "div");
+ 
+-  const ref = mergeRefs(handleRootRef, props.ref as ((element: HTMLDivElement | null) => void) | undefined);
++  let ref = mergeRefs(handleRootRef, props.ref as ((element: HTMLDivElement | null) => void) | undefined);
+ 
+   // Element props overwrite the internal handlers in the Solid layer; a custom
+   // handler therefore replaces the built-in swipe and Escape handling.
+diff --git a/src/toast/viewport/ToastViewport.tsx b/src/toast/viewport/ToastViewport.tsx
+index 631a862d8e3580cf709ad3435b26f6b559a0a49d..fa0933e3fb8920b2b47e0e81844b2207a2d1bcfb 100755
+--- a/src/toast/viewport/ToastViewport.tsx
++++ b/src/toast/viewport/ToastViewport.tsx
+@@ -239,7 +239,7 @@ export function ToastViewport<T extends JSX.ElementType = "div">(props: ToastVie
+ 
+   const Tag = dynamicElement<JSX.ElementType>(() => props.as ?? "div");
+ 
+-  const ref = mergeRefs(
++  let ref = mergeRefs(
+     (element: HTMLElement | null) => {
+       toastStore.setViewport(element);
+     },
+diff --git a/src/toggle/Toggle.tsx b/src/toggle/Toggle.tsx
+index ae948a9f6e6ea25b0e9ff468240e28d54824ff32..c4c0dcb4598275a7ba652d4bd72517aed3ab2543 100755
+--- a/src/toggle/Toggle.tsx
++++ b/src/toggle/Toggle.tsx
+@@ -135,7 +135,7 @@ export function Toggle<Value extends string = string, T extends JSX.ElementType
+   });
+   const merged = composite?.getCompositeProps(externalProps);
+ 
+-  const ref = mergeRefs(button.buttonRef, composite?.compositeRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
++  let ref = mergeRefs(button.buttonRef, composite?.compositeRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
+ 
+   function snapshot(): ToggleState {
+     return { pressed: isPressed(), disabled: disabled() };
+diff --git a/src/toggle-group/ToggleGroup.tsx b/src/toggle-group/ToggleGroup.tsx
+index 0a9aa995682b9da15ab1737308505c1659299d53..0d268be7206107375eecfad907341dfab421be1d 100755
+--- a/src/toggle-group/ToggleGroup.tsx
++++ b/src/toggle-group/ToggleGroup.tsx
+@@ -121,7 +121,7 @@ export function ToggleGroup<Value extends string = string, T extends JSX.Element
+     return { disabled: disabled(), multiple: multiple(), orientation: orientation() };
+   }
+ 
+-  const ref = mergeRefs(rootRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
++  let ref = mergeRefs(rootRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
+ 
+   const Tag = dynamicElement<JSX.ElementType>(() => props.as ?? "div");
+ 
+diff --git a/src/tooltip/arrow/TooltipArrow.tsx b/src/tooltip/arrow/TooltipArrow.tsx
+index 4b39171e19241e5b98e652cd22bbf7e50d262002..ef1fa8e511e2478733a3bacfdc3223c840314481 100755
+--- a/src/tooltip/arrow/TooltipArrow.tsx
++++ b/src/tooltip/arrow/TooltipArrow.tsx
+@@ -37,7 +37,7 @@ export function TooltipArrow<T extends JSX.ElementType = "div">(props: TooltipAr
+ 
+   const Tag = dynamicElement<JSX.ElementType>(() => props.as ?? "div");
+ 
+-  const elementRef = mergeRefs(
++  let elementRef = mergeRefs(
+     (element: Element | null) => {
+       positioner.arrowRef.current = element;
+     },
+diff --git a/src/tooltip/popup/TooltipPopup.tsx b/src/tooltip/popup/TooltipPopup.tsx
+index 9a268ebf3d855e0fede90636e70a33e93147bd67..de0dd3d21cfc273650b398b65f81795e089e3b2f 100755
+--- a/src/tooltip/popup/TooltipPopup.tsx
++++ b/src/tooltip/popup/TooltipPopup.tsx
+@@ -102,7 +102,7 @@ export function TooltipPopup<T extends JSX.ElementType = "div">(props: TooltipPo
+     store.set("popupElement", element);
+   }
+ 
+-  const elementRef = mergeRefs(popupRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
++  let elementRef = mergeRefs(popupRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
+ 
+   const Tag = dynamicElement<JSX.ElementType>(() => props.as ?? "div");
+ 
+diff --git a/src/tooltip/positioner/TooltipPositioner.tsx b/src/tooltip/positioner/TooltipPositioner.tsx
+index e2d4ea854b44f316fd774da47bc96d8ca5f8f49f..d3828e89e6d86b04c10a122cb274f80763a82a3d 100755
+--- a/src/tooltip/positioner/TooltipPositioner.tsx
++++ b/src/tooltip/positioner/TooltipPositioner.tsx
+@@ -131,7 +131,7 @@ export function TooltipPositioner<T extends JSX.ElementType = "div">(props: Tool
+     store.set("positionerElement", element);
+   }
+ 
+-  const elementRef = mergeRefs(positionerRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
++  let elementRef = mergeRefs(positionerRef, props.ref as ((element: HTMLElement | null) => void) | undefined);
+ 
+   // The provider lives inside the tag: context does not flow through dynamicElement,
+   // so providing above it would leave the positioner parts without context. Children
+diff --git a/src/tooltip/trigger/TooltipTrigger.tsx b/src/tooltip/trigger/TooltipTrigger.tsx
+index db5ff7160db3c84734f5e69e1a6339f8fdb8b150..04d8f30a976c1084d31156c110c949937c045ea1 100755
+--- a/src/tooltip/trigger/TooltipTrigger.tsx
++++ b/src/tooltip/trigger/TooltipTrigger.tsx
+@@ -407,7 +407,7 @@ export function TooltipTrigger<Payload = unknown, T extends JSX.ElementType = "b
+     }
+   }
+ 
+-  const elementRef = mergeRefs(setTriggerElement, props.ref as ((element: Element | null) => void) | undefined);
++  let elementRef = mergeRefs(setTriggerElement, props.ref as ((element: Element | null) => void) | undefined);
+ 
+   // `as` is resolved once (matching the Solid layer, where it is untracked): a dynamic element
+   // re-creates its DOM node whenever a sibling mounts or unmounts, which would drop the

@@ -1,5 +1,5 @@
+import reze from "@rezejs/vite-plugin";
 import { defineConfig } from "vitest/config";
-import solid from "@solidjs/vite-plugin";
 
 import { fileURLToPath } from "node:url";
 
@@ -20,21 +20,21 @@ export default defineConfig(({ command }) => ({
       },
     ],
   },
-  // generates the entries around src/App.tsx, wrapped in src/Document.tsx.
-  // `vite build` prerenders the shell into dist/client/index.html and emits a
-  // purely static dist/client.
-  plugins: [
-    solid({ start: true, extensions: [".jsx", ".tsx"], diagnostics: true }),
-  ],
+  plugins: [reze({ diagnostics: { jsonl: "node_modules/.cache/reze-diagnostics.jsonl" } })],
   server: {
     port: 3000,
   },
+  define:
+    process.env.VITEST === undefined
+      ? {}
+      : { __REZE_HTML__: "false", __REZE_HYDRATE__: "false" },
   test: {
     environment: "jsdom",
     globals: false,
-    setupFiles: ["./vitest-setup.ts"],
   },
   build: {
+    // the deployments (CDN, Tauri, `plugin:bundle`) take the site from here
+    outDir: "dist/client",
     target: "esnext",
     // Keep images as asset files instead of inlining them into the JS bundle.
     assetsInlineLimit: 0,
