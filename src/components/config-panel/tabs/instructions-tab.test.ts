@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { nodeRegistry } from "~/lib/nodes";
-import { INSTRUCTION_DOCS } from "./instructions-tab";
+import { INSTRUCTION_LOADERS } from "./instructions-tab";
 
 /** The guides are found by a glob relative to the file that holds it — moving
  * the file silently empties the map and every guide disappears. */
@@ -9,7 +9,7 @@ describe("node guides", () => {
     const missing = nodeRegistry
       .list()
       .flatMap((def) => ["ru", "en"].map((l) => `${l}/${def.type}`))
-      .filter((key) => !INSTRUCTION_DOCS[key]);
+      .filter((key) => !INSTRUCTION_LOADERS[key]);
     expect(missing).toEqual([]);
   });
 });

@@ -1,7 +1,23 @@
 import reze from "@rezejs/vite-plugin";
-import { defineConfig } from "vitest/config";
+import { readFile } from "node:fs/promises";
+import { marked } from "marked";
+import { defineConfig, type Plugin } from "vitest/config";
 
 import { fileURLToPath } from "node:url";
+
+/** `import html from "./guide.md?html"`: the Markdown compiled at build time, so
+ * the parser is not shipped for files that never change at run time. */
+const markdownHtml = (): Plugin => ({
+  name: "reline:markdown-html",
+  enforce: "pre",
+  async load(id) {
+    if (!id.endsWith(".md?html")) return null;
+    const path = id.slice(0, -"?html".length);
+    this.addWatchFile(path);
+    const html = marked.parse(await readFile(path, "utf8"), { async: false });
+    return `export default ${JSON.stringify(html)};`;
+  },
+});
 
 export default defineConfig(({ command }) => ({
   // CDN serves the app from a nested path, so the built page must reference
@@ -21,6 +37,7 @@ export default defineConfig(({ command }) => ({
     ],
   },
   plugins: [
+    markdownHtml(),
     reze({
       // the library ships no current manifest: analyse its source instead
       analyze: ["@rebase-ui/reze"],

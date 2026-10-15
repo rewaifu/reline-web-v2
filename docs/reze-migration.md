@@ -5,7 +5,7 @@ identical behaviour and no new bugs. Clean cutover: no Solid code, no dual runti
 
 Baseline (main @ e0bf438): `pnpm test` 34 files / 325 tests, `pnpm lint`, `pnpm typecheck` clean; build `dist/client` JS 483 kB (160 kB gzip), CSS 52.7 kB.
 
-**Status: ported and verified.** Now: 36 files / 335 tests, lint + typecheck clean, JS 381 kB (123 kB gzip), CSS identical (52.69 kB, same hash). Parity harness (`scripts/parity`) baseline vs port: 1 difference left, the bundled `sequence` plugin version (1.2.0 → 1.3.0, new ABI). Independent browser verification (plugins, run/data, layout/input) found no open regressions; see "Verification record".
+**Status: ported and verified.** Now: 36 files / 335 tests, lint + typecheck clean, JS 301 kB (97 kB gzip; the Markdown parser is a 43 kB lazy chunk, every bundled guide its own small chunk), CSS identical (52.69 kB, same hash). Parity harness (`scripts/parity`) baseline vs port: 1 difference left, the bundled `sequence` plugin version (1.2.0 → 1.3.0, new ABI). Independent browser verification (plugins, run/data, layout/input) found no open regressions; see "Verification record".
 
 ## Spike findings (/tmp/reze-spike, verified)
 
@@ -162,25 +162,25 @@ Upstream issues to report: F1 (list rows with function values), F2 (children rea
 
 ## Invariant → proof table
 
-| Invariant (from the skill) | Proof |
-|---|---|
-| uid is the only identity; survivors never cloned | `context/reducer.test.ts`; `node-card/reorder-identity.test.tsx` (move, add, delete, active override keep the same card elements) |
-| option edit keeps card DOM + focus | `node-card.test.tsx`; parity: same element after a number edit |
-| selection click recomputes 2 rows | `selector` in Workspace; layout verifier: select click 30 ms vs 28 ms at 500 nodes |
-| unknown node types kept verbatim | `registry.test.ts`, `node-shape.test.ts`; run/data verifier: `x.y` round trip |
-| plugin boot crash flag recovery | `plugins.test.ts`; plugin verifier: crash reload disables the suspects |
-| plugin errors contained (slot, override, dynamic child, late binding) | `errored/errored.test.tsx`, `slot/slot.test.tsx`; plugin verifier F7 verdict |
-| tabs overflow burger | `tabs/fit.test.ts`; parity layout + burger sweep 1400→600 px identical |
-| code overlay alignment | parity `code`; run/data verifier: scrollHeight/clientWidth equal, caret on the clicked line |
-| phone layout 390/320/landscape | parity `layout` (5 viewports); layout verifier: deep diff 0 |
-| i18n flip rerenders everything | `i18n.test.ts`; parity `i18n` (tab labels needed the fragment fix, F2) |
-| run protocol, journal cap, resume | `run-client.test.ts`; run/data verifier against a mock runner |
-| model list / path completion | `model-db.test.ts`, `path-row.test.tsx`; 12 cold visits per origin 12/12 |
+| Invariant (from the skill)                                            | Proof                                                                                                                             |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| uid is the only identity; survivors never cloned                      | `context/reducer.test.ts`; `node-card/reorder-identity.test.tsx` (move, add, delete, active override keep the same card elements) |
+| option edit keeps card DOM + focus                                    | `node-card.test.tsx`; parity: same element after a number edit                                                                    |
+| selection click recomputes 2 rows                                     | `selector` in Workspace; layout verifier: select click 30 ms vs 28 ms at 500 nodes                                                |
+| unknown node types kept verbatim                                      | `registry.test.ts`, `node-shape.test.ts`; run/data verifier: `x.y` round trip                                                     |
+| plugin boot crash flag recovery                                       | `plugins.test.ts`; plugin verifier: crash reload disables the suspects                                                            |
+| plugin errors contained (slot, override, dynamic child, late binding) | `errored/errored.test.tsx`, `slot/slot.test.tsx`; plugin verifier F7 verdict                                                      |
+| tabs overflow burger                                                  | `tabs/fit.test.ts`; parity layout + burger sweep 1400→600 px identical                                                            |
+| code overlay alignment                                                | parity `code`; run/data verifier: scrollHeight/clientWidth equal, caret on the clicked line                                       |
+| phone layout 390/320/landscape                                        | parity `layout` (5 viewports); layout verifier: deep diff 0                                                                       |
+| i18n flip rerenders everything                                        | `i18n.test.ts`; parity `i18n` (tab labels needed the fragment fix, F2)                                                            |
+| run protocol, journal cap, resume                                     | `run-client.test.ts`; run/data verifier against a mock runner                                                                     |
+| model list / path completion                                          | `model-db.test.ts`, `path-row.test.tsx`; 12 cold visits per origin 12/12                                                          |
 
 ## Verification record
 
 - Gates: `pnpm lint`, `pnpm typecheck`, `pnpm test --run`, `pnpm build`, `pnpm plugin:build && pnpm plugin:pin` (no `public/plugins` drift).
 - Compiler diagnostics (fresh build): only `AUTO_SELECTOR` (info); no warnings.
 - Console at idle and through every flow: zero warn/error on dev and production builds (the runner WebSocket 404s on an absent runner are identical on the baseline).
-- Perf, 500-node stack (single runs, noisy): first render 392 ms vs 1224 ms (faster), selection 30 vs 28 ms, option edit 1.2 vs 2.0 s (faster), keyboard reorder 1.6 vs 1.8 s, **expanding one card 614 vs 203 ms (3× slower)**, heap +17 %. DOM node count per card is *lower* than the baseline (expanded stack 1935 vs 2108 nodes). The expand cost is the O(N) re-subscribe of the persistence/analysis effects over the Reze store proxy; stacks are normally < 20 nodes.
+- Perf, 500-node stack (single runs, noisy): first render 392 ms vs 1224 ms (faster), selection 30 vs 28 ms, option edit 1.2 vs 2.0 s (faster), keyboard reorder 1.6 vs 1.8 s, **expanding one card 614 vs 203 ms (3× slower)**, heap +17 %. DOM node count per card is _lower_ than the baseline (expanded stack 1935 vs 2108 nodes). The expand cost is the O(N) re-subscribe of the persistence/analysis effects over the Reze store proxy; stacks are normally < 20 nodes.
 - Known limits: list identity must be checked on the production build (F1/dev HMR); the `@rebase-ui/reze` patch is required until upstream fixes `const ref`; the plugin API is v2 — Solid-built (v1) plugins are refused with a message.
