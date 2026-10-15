@@ -5,7 +5,7 @@ import { NodesContext, NodesDispatchContext } from "~/context/contexts";
 import { raw, setLocale } from "~/lib/i18n";
 import { createDefaultNodes, nodeRegistry } from "~/lib/nodes";
 import type { StackNode } from "~/types/node";
-import { InstructionsTab } from "./instructions-tab";
+import { INSTRUCTION_LOADERS, InstructionsTab } from "./instructions-tab";
 
 afterEach(() => {
   cleanup();
@@ -60,5 +60,17 @@ describe("InstructionsTab", () => {
     } finally {
       dispose();
     }
+  });
+});
+
+/** The guides are found by a glob relative to the file that holds it — moving
+ * the file silently empties the map and every guide disappears. */
+describe("node guides", () => {
+  it("exist in both languages for every built-in node type", () => {
+    const missing = nodeRegistry
+      .list()
+      .flatMap((def) => ["ru", "en"].map((l) => `${l}/${def.type}`))
+      .filter((key) => !INSTRUCTION_LOADERS[key]);
+    expect(missing).toEqual([]);
   });
 });
