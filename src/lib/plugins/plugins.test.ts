@@ -1,6 +1,16 @@
-import { flush } from "solid-js";
+import { tick } from "@rezejs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginApi } from "~/lib/plugins/api";
+import type * as Runtime from "~/lib/plugins/runtime";
+import type * as Store from "~/lib/plugins/store";
+import type * as Loader from "~/lib/plugins/loader";
+import type * as Manifest from "~/lib/plugins/manifest";
+import type * as Nodes from "~/lib/nodes";
+import type * as Ui from "~/lib/ui/registry";
+import type * as Pipeline from "~/lib/pipeline";
+import type * as I18n from "~/lib/i18n";
+import type * as Actions from "~/context/actions";
+import type * as Ws from "~/lib/ws";
 
 /** The plugin runtime end to end, with a fake web and a fake module loader:
  * what is fetched and checked before anything runs, what a plugin gets for the
@@ -90,7 +100,17 @@ const fresh = async () => {
     ws,
   };
 };
-type World = Awaited<ReturnType<typeof fresh>>;
+type World = typeof Runtime &
+  typeof Store &
+  typeof Loader &
+  typeof Manifest & {
+    nodes: typeof Nodes;
+    ui: typeof Ui;
+    pipeline: typeof Pipeline;
+    i18n: typeof I18n;
+    actions: typeof Actions;
+    ws: typeof Ws;
+  };
 
 const publish = async (
   w: World,
@@ -104,7 +124,7 @@ const publish = async (
       id: f.id,
       name: f.id,
       version: f.version ?? "1.0.0",
-      api: 1,
+      api: 2,
       entry: "index.js",
       integrity,
       caps: f.caps,
@@ -120,7 +140,7 @@ const install = async (w: World, f: Fixture, grant?: string[]) => {
   const url = await publish(w, f);
   const preview = await w.pluginRuntime.preview(url);
   await w.pluginRuntime.install(preview, (grant ?? f.caps) as never);
-  flush();
+  tick();
   return preview;
 };
 
@@ -151,7 +171,7 @@ describe("manifest", () => {
     const base = {
       name: "n",
       version: "1.0.0",
-      api: 1,
+      api: 2,
       entry: "e.js",
       caps: [],
     };
@@ -175,7 +195,7 @@ describe("manifest", () => {
         id,
       ).toBe(false);
     expect(
-      safeParse(w.PluginManifestSchema, { ...base, id: "acme.x", api: 2 })
+      safeParse(w.PluginManifestSchema, { ...base, id: "acme.x", api: 1 })
         .success,
     ).toBe(false);
     expect(
@@ -200,7 +220,7 @@ describe("fetching a plugin", () => {
     id: "acme.one",
     name: "One",
     version: "1.0.0",
-    api: 1,
+    api: 2,
     entry: "index.js",
     caps: [],
     ...over,
@@ -330,10 +350,12 @@ describe("installing and running", () => {
     expect(seen?.storage).toBeDefined();
     expect(seen?.ui).toBeUndefined();
     expect(seen?.store).toBeUndefined();
-    // the host's own Solid, never a second copy
-    expect(
-      (globalThis as { __RELINE__?: { solid: unknown } }).__RELINE__?.solid,
-    ).toBe(seen?.solid);
+    // the host exposes its own Reze copy to plugin bundles; never a second one
+    const exposed: Record<string, unknown> | undefined = Reflect.get(
+      globalThis,
+      "__RELINE__",
+    );
+    expect(exposed?.["reze-js"]).toHaveProperty("render");
   });
 
   it("persists the install and caches the verified code", async () => {
@@ -387,7 +409,7 @@ describe("installing and running", () => {
     });
     expect(Object.values(hasAll()).every(Boolean)).toBe(true);
     w.pluginRuntime.disable("acme.all");
-    flush();
+    tick();
     expect(Object.values(hasAll()).some(Boolean)).toBe(false);
     expect(w.pluginRuntime.status("acme.all").state).toBe("off");
   });
@@ -689,7 +711,7 @@ describe("installing and running", () => {
       activate: () => {},
     });
     w.pluginRuntime.remove("acme.gone");
-    flush();
+    tick();
     expect(w.pluginStore.list()).toHaveLength(0);
     expect(mem.getItem("reline-web:plugin-code:acme.gone")).toBeNull();
   });
@@ -733,12 +755,12 @@ describe("storage quota and i18n", () => {
     api.i18n!.add("en", { hi: "Hello {who}", only: "English only" });
     api.i18n!.add("ru", { hi: "Привет {who}" });
     w.i18n.setLocale("ru");
-    flush();
+    tick();
     expect(api.i18n!.t("hi", { who: "A" })).toBe("Привет A");
     expect(api.i18n!.t("only")).toBe("English only");
     expect(api.i18n!.t("missing")).toBe("missing");
     w.i18n.setLocale("en");
-    flush();
+    tick();
     expect(api.i18n!.t("hi", { who: "A" })).toBe("Hello A");
   });
 });
@@ -790,7 +812,7 @@ describe("start, safe mode and crash recovery", () => {
     ran = 0;
     await w.pluginRuntime.start();
     expect(ran).toBe(0);
-    flush();
+    tick();
     expect(w.pluginRuntime.boot().safeMode).toBe(true);
   });
 
@@ -809,7 +831,7 @@ describe("start, safe mode and crash recovery", () => {
       },
     });
     await w.pluginRuntime.start();
-    flush();
+    tick();
     expect(ran).toBe(0);
     expect(w.pluginStore.get("acme.crashy")).toMatchObject({
       enabled: false,
@@ -849,7 +871,7 @@ describe("start, safe mode and crash recovery", () => {
       "?plugin=https%3A%2F%2Fplugins.example%2Fx%2Fplugin.json&keep=1",
     );
     await w.pluginRuntime.start();
-    flush();
+    tick();
     expect(w.pluginRuntime.pendingInstall()).toBe(
       "https://plugins.example/x/plugin.json",
     );
@@ -938,7 +960,7 @@ describe("the sandboxed (worker) tier", () => {
       id: "acme.w",
       name: "w",
       version: "1.0.0",
-      api: 1,
+      api: 2,
       entry: "e.js",
       sandbox: "worker",
     };
@@ -982,7 +1004,7 @@ describe("the sandboxed (worker) tier", () => {
     await w.pluginRuntime.install(await w.pluginRuntime.preview(url), [
       "pipeline",
     ]);
-    flush();
+    tick();
     expect(w.pluginRuntime.status("acme.work").state).toBe("active");
     // the page-side module was never loaded
     expect(pageActivate).not.toHaveBeenCalled();
@@ -1045,7 +1067,7 @@ describe("the sandboxed (worker) tier", () => {
     await expect(w.pipeline.pipeline.applyAsync(config, [])).resolves.toBe(
       config,
     );
-    flush();
+    tick();
     expect(w.pipeline.pipeline.failures().at(-1)).toMatchObject({
       id: "acme.whook:worker",
       message: "hook broke",
@@ -1085,7 +1107,7 @@ describe("plugins bundled with the deployment", () => {
       }),
     );
     await w.pluginRuntime.start();
-    flush();
+    tick();
     expect(ran).toBe(1);
     expect(w.pluginRuntime.status("acme.shell").state).toBe("active");
     expect(w.pluginStore.get("acme.shell")).toMatchObject({
@@ -1099,7 +1121,7 @@ describe("plugins bundled with the deployment", () => {
   it("a deployment without a list is not an error", async () => {
     const w = await fresh();
     await w.pluginRuntime.start();
-    flush();
+    tick();
     expect(w.pluginRuntime.bundleFailures()).toEqual([]);
     expect(w.pluginStore.list()).toHaveLength(0);
   });
@@ -1114,10 +1136,10 @@ describe("plugins bundled with the deployment", () => {
     };
     list(await ship(w, fixture));
     await w.pluginRuntime.start();
-    flush();
+    tick();
     expect(entryFetches()).toBe(1);
     w.pluginRuntime.disable("acme.keep");
-    flush();
+    tick();
 
     w = await fresh();
     await w.pluginRuntime.start();
@@ -1126,7 +1148,7 @@ describe("plugins bundled with the deployment", () => {
     w = await fresh();
     await ship(w, { ...fixture, version: "1.1.0", code: "// v2" });
     await w.pluginRuntime.start();
-    flush();
+    tick();
     expect(entryFetches()).toBe(2);
     expect(w.pluginStore.get("acme.keep")).toMatchObject({
       enabled: false,
@@ -1148,13 +1170,13 @@ describe("plugins bundled with the deployment", () => {
     );
     await w.pluginRuntime.start();
     w.pluginRuntime.remove("acme.fixed");
-    flush();
+    tick();
     expect(w.pluginStore.get("acme.fixed")).toBeDefined();
 
     w = await fresh();
     list();
     await w.pluginRuntime.start();
-    flush();
+    tick();
     expect(w.pluginStore.get("acme.fixed")).toBeUndefined();
     expect(w.pluginStore.cachedCode("acme.fixed")).toBeUndefined();
   });
@@ -1177,7 +1199,7 @@ describe("plugins bundled with the deployment", () => {
       }),
     );
     await w.pluginRuntime.start();
-    flush();
+    tick();
     expect(w.pluginStore.get("acme.mine")).toMatchObject({
       grantedCaps: [],
       integrity: await w.sha384("// mine"),
@@ -1205,7 +1227,7 @@ describe("plugins bundled with the deployment", () => {
       "https://elsewhere.example/x/plugin.json",
     );
     await w.pluginRuntime.start();
-    flush();
+    tick();
     expect(w.pluginRuntime.bundleFailures()).toHaveLength(2);
     expect(w.pluginRuntime.bundleFailures()[1].detail).toContain("own site");
     expect(w.pluginRuntime.status("acme.good").state).toBe("active");

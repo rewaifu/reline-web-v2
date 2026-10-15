@@ -1,6 +1,6 @@
-// Writes sdk/host-exports.json: the names the host's Solid builds export, which
-// the SDK's build helper needs to re-export `solid-js` / `@solidjs/web` from the
-// host's own copy at runtime (a plugin must never bundle a second Solid).
+// Writes sdk/host-exports.json: the names the host's Reze modules export, which
+// the SDK's build helper needs to re-export `reze-js` and its internal entries
+// from the host's own copy at runtime (a plugin must never bundle a second Reze).
 //
 //   node --conditions=browser scripts/gen-host-exports.mjs
 //
@@ -13,13 +13,16 @@ const names = async (specifier) =>
     .sort();
 
 const out = {
-  "solid-js": await names("solid-js"),
-  "@solidjs/web": await names("@solidjs/web"),
+  "reze-js": await names("reze-js"),
+  "reze-js/internal/reactivity": await names("reze-js/internal/reactivity"),
+  "reze-js/internal/runtime": await names("reze-js/internal/runtime"),
 };
 writeFileSync(
   new URL("../sdk/host-exports.json", import.meta.url),
   `${JSON.stringify(out, null, 2)}\n`,
 );
 console.log(
-  `solid-js: ${out["solid-js"].length} names, @solidjs/web: ${out["@solidjs/web"].length} names`,
+  Object.entries(out)
+    .map(([specifier, list]) => `${specifier}: ${list.length} names`)
+    .join(", "),
 );

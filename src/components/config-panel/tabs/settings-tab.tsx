@@ -1,4 +1,4 @@
-import type { Component } from "solid-js";
+import type { Component } from "~/types/component";
 import { Label, UiSelect } from "~/components/ui";
 import { LOCALE_NAMES, locale, setLocale, t, type Locale } from "~/lib/i18n";
 import styles from "../config-panel.module.scss";

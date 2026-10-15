@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { signal } from "reze-js";
 import * as v from "valibot";
 import { storage } from "~/lib/storage";
 import {
@@ -46,28 +46,26 @@ const load = (): InstalledPlugin[] => {
   });
 };
 
-// The list answers immediately (a write is deferred in Solid 2, and `put` is
-// followed at once by a `get`); the signal only tells subscribers to ask again.
-// `ownedWrite`: installing and switching happen from event handlers and from the
-// runtime's own async code alike.
+// The list answers immediately: `put` is followed at once by a `get`, so the
+// array is the source of truth. The signal only tells subscribers to ask again.
 let current: readonly InstalledPlugin[] = load();
-const [revision, setRevision] = createSignal(0, { ownedWrite: true });
+let revision = signal(0);
 
 const persist = (next: readonly InstalledPlugin[]): void => {
   current = next;
-  setRevision((n) => n + 1);
+  revision += 1;
   storage.setJson(REGISTRY_KEY, next);
 };
 
 export const pluginStore = {
   /** Installed plugins, in install order. Reactive. */
   list(): readonly InstalledPlugin[] {
-    revision();
+    void revision;
     return current;
   },
 
   get(id: string): InstalledPlugin | undefined {
-    revision();
+    void revision;
     return current.find((p) => p.manifest.id === id);
   },
 

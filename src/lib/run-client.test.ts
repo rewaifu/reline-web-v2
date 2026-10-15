@@ -1,5 +1,5 @@
 import { decode, encode } from "notepack.io";
-import { flush } from "solid-js";
+import { tick } from "@rezejs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, setLocale } from "~/lib/i18n";
 import { createRunClient, type RunClient } from "~/lib/run-client";
@@ -105,11 +105,11 @@ const last = (): FakeSocket => FakeSocket.all[FakeSocket.all.length - 1];
 const RUN_ID = "a1b2c3d4e5f6";
 const startRun = (client: RunClient): FakeSocket => {
   client.start("ws://runner/run", PIPELINE);
-  flush();
+  tick();
   const socket = last();
   socket.open();
   socket.server({ m: "accepted", id: 1, d: { run_id: RUN_ID } });
-  flush();
+  tick();
   return socket;
 };
 
@@ -148,7 +148,7 @@ describe("run lifecycle", () => {
         run_id: RUN_ID,
       },
     });
-    flush();
+    tick();
     expect(client.progress()?.percent).toBe(40);
     expect(client.progress()?.phase).toBe("preprocess");
 
@@ -158,12 +158,12 @@ describe("run lifecycle", () => {
       id: 1,
       d: { percent: 55, phase: "nonsense", run_id: RUN_ID },
     });
-    flush();
+    tick();
     expect(client.progress()?.percent).toBe(55);
     expect(client.progress()?.phase).toBeUndefined();
 
     socket.server({ m: "done", id: 1, d: { ok: true, run_id: RUN_ID } });
-    flush();
+    tick();
     expect(client.phase()).toBe("idle");
     expect(client.runId()).toBeUndefined();
     expect(journal(client)).toContain("Готово");
@@ -178,10 +178,10 @@ describe("reconnect", () => {
       id: 1,
       d: { percent: 40, phase: "process", run_id: RUN_ID },
     });
-    flush();
+    tick();
 
     first.drop();
-    flush();
+    tick();
     // the run is not over: the bar keeps its value and the journal says why
     expect(client.phase()).toBe("recovering");
     expect(client.runId()).toBe(RUN_ID);
@@ -194,7 +194,7 @@ describe("reconnect", () => {
     expect(second).not.toBe(first);
 
     second.open();
-    flush();
+    tick();
     // the fresh socket asks where the run stands — it never repeats `start`
     // (that would write the outputs twice and earn `worker busy` anyway)
     expect(client.phase()).toBe("recovering");
@@ -210,7 +210,7 @@ describe("reconnect", () => {
         progress: { percent: 40, phase: "process", run_id: RUN_ID },
       },
     });
-    flush();
+    tick();
     expect(second.methods()).toEqual(["status", "attach"]);
     expect(second.sent[1]?.d).toEqual({ run_id: RUN_ID });
 
@@ -219,7 +219,7 @@ describe("reconnect", () => {
       id: 3,
       d: { run_id: RUN_ID, status: "running" },
     });
-    flush();
+    tick();
     expect(client.phase()).toBe("running");
     expect(journal(client)).toContain("Подключено к прогону, кадры идут");
 
@@ -229,20 +229,20 @@ describe("reconnect", () => {
       id: 1,
       d: { percent: 80, phase: "process", run_id: RUN_ID },
     });
-    flush();
+    tick();
     expect(client.progress()?.percent).toBe(80);
     second.drop();
-    flush();
+    tick();
     expect(journal(client).at(-1)).toBe("Переподключение (1/4)…");
   });
 
   it("adopts the run_id from worker busy instead of arguing with the gate", () => {
     const client = createRunClient();
     client.start("ws://runner/run", PIPELINE);
-    flush();
+    tick();
     const first = last();
     first.open();
-    flush();
+    tick();
     // the server never answered `accepted` but the run exists (our own drop
     // raced the accept): `worker busy` names it
     first.server({
@@ -250,7 +250,7 @@ describe("reconnect", () => {
       id: 1,
       d: { message: "worker busy", run_id: RUN_ID },
     });
-    flush();
+    tick();
     expect(client.runId()).toBe(RUN_ID);
     expect(first.methods()).toEqual(["start", "attach"]);
     expect(first.sent[1]?.d).toEqual({ run_id: RUN_ID });
@@ -260,17 +260,17 @@ describe("reconnect", () => {
     const client = createRunClient();
     const first = startRun(client);
     first.drop();
-    flush();
+    tick();
     vi.advanceTimersByTime(1000);
     const second = last();
     second.open();
-    flush();
+    tick();
     second.server({
       m: "status",
       id: 2,
       d: { run_id: RUN_ID, status: "done", result: { ok: true } },
     });
-    flush();
+    tick();
     expect(client.phase()).toBe("idle");
     expect(client.runId()).toBeUndefined();
     expect(journal(client)).toContain("Готово");
@@ -284,37 +284,37 @@ describe("reconnect", () => {
     // no retry, no journal line, and the panel looking idle as if nothing had
     // been pressed.
     client.start("ws://dead/run", PIPELINE);
-    flush();
+    tick();
     expect(client.phase()).toBe("connecting");
     expect(last().methods()).toEqual([]);
 
     // a second press while the dial is in flight must not start a second run
     client.start("ws://dead/run", PIPELINE);
-    flush();
+    tick();
     expect(FakeSocket.all).toHaveLength(1);
 
     const first = last();
     first.drop();
-    flush();
+    tick();
     expect(client.phase()).toBe("connecting");
     expect(journal(client).at(-1)).toBe("Переподключение (1/4)…");
 
     vi.advanceTimersByTime(1000);
     expect(FakeSocket.all).toHaveLength(2);
     last().drop();
-    flush();
+    tick();
     expect(journal(client).at(-1)).toBe("Переподключение (2/4)…");
 
     // and it stops on its own: four attempts, then one readable line
     vi.advanceTimersByTime(2000);
     last().drop();
-    flush();
+    tick();
     vi.advanceTimersByTime(4000);
     last().drop();
-    flush();
+    tick();
     vi.advanceTimersByTime(8000);
     last().drop();
-    flush();
+    tick();
     expect(client.phase()).toBe("idle");
     expect(journal(client).at(-1)).toContain("Переподключиться не удалось");
   });
@@ -323,7 +323,7 @@ describe("reconnect", () => {
     const client = createRunClient();
     const first = startRun(client);
     first.drop();
-    flush();
+    tick();
 
     vi.advanceTimersByTime(999);
     expect(FakeSocket.all).toHaveLength(1);
@@ -331,7 +331,7 @@ describe("reconnect", () => {
     expect(FakeSocket.all).toHaveLength(2);
 
     last().drop();
-    flush();
+    tick();
     vi.advanceTimersByTime(1999);
     expect(FakeSocket.all).toHaveLength(2);
     vi.advanceTimersByTime(1);
@@ -345,13 +345,13 @@ describe("reconnect", () => {
     let socket = first;
     for (let expected = 2; expected <= 5; expected += 1) {
       socket.drop();
-      flush();
+      tick();
       vi.advanceTimersByTime(30_000);
       expect(FakeSocket.all).toHaveLength(expected);
       socket = last();
     }
     socket.drop();
-    flush();
+    tick();
     vi.advanceTimersByTime(30_000);
 
     expect(FakeSocket.all).toHaveLength(5);
@@ -365,7 +365,7 @@ describe("reconnect", () => {
 
     // no echo reply: the watchdog fires, closes the socket, retries
     vi.advanceTimersByTime(30_000);
-    flush();
+    tick();
     expect(client.phase()).toBe("recovering");
     expect(journal(client)).toContain(
       "Соединение потеряно: нет ответа на echo",
@@ -377,13 +377,13 @@ describe("reconnect", () => {
     const socket = startRun(client);
 
     client.stop();
-    flush();
+    tick();
     expect(client.phase()).toBe("stopping");
     expect(socket.methods()).toEqual(["start", "stop"]);
     expect(socket.sent[1]?.d).toEqual({ run_id: RUN_ID });
 
     socket.server({ m: "done", id: 2, d: { ok: false, cancelled: true } });
-    flush();
+    tick();
     expect(client.phase()).toBe("idle");
     expect(journal(client)).toContain("Остановлено");
 
@@ -394,11 +394,11 @@ describe("reconnect", () => {
   it("cancels a pending retry when the user stops", () => {
     const client = createRunClient();
     startRun(client).drop();
-    flush();
+    tick();
     expect(client.phase()).toBe("recovering");
 
     client.stop();
-    flush();
+    tick();
     expect(client.phase()).toBe("idle");
     expect(journal(client)).toContain("Отменено до подключения");
 

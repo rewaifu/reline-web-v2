@@ -1,5 +1,5 @@
 import { decode } from "notepack.io";
-import { flush } from "solid-js";
+import { tick } from "@rezejs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /** The runner address is one setting, not a field only `start()` reads: the
@@ -111,9 +111,7 @@ describe("run endpoint", () => {
     expect(run.endpoint()).toBe("ws://stored/run");
 
     run.setEndpoint("wss://typed/run");
-    // Solid 2 queues signal writes and applies them on flush; the app reads the
-    // value from the next event, a synchronous test has to flush first
-    flush();
+    tick();
     expect(run.endpoint()).toBe("wss://typed/run");
     expect(storage.getItem("reline-web:runEndpoint")).toBe("wss://typed/run");
   });
@@ -122,7 +120,7 @@ describe("run endpoint", () => {
     useUrl("?api=wss://from-url/run");
     const run = await loadRun();
     run.setEndpoint("wss://typed/run");
-    flush();
+    tick();
 
     // a reload drops ?api= (the user opened a plain URL) and re-reads storage
     useUrl("");
@@ -135,7 +133,7 @@ describe("run endpoint", () => {
     const run = await loadRun();
     const replaceState = vi.spyOn(window.history, "replaceState");
     run.setEndpoint("wss://typed/run");
-    flush();
+    tick();
     expect(replaceState).toHaveBeenCalled();
     replaceState.mockRestore();
   });
@@ -179,7 +177,7 @@ describe("ls follows the address", () => {
   it("dials the current address and drops a socket to the old one", async () => {
     const run = await loadRun();
     run.setEndpoint("ws://first/run");
-    flush();
+    tick();
     // same reason as `loadRun`: the client is a singleton created at import
     const { lsClient } = await import("~/lib/ls-client");
 
@@ -188,7 +186,7 @@ describe("ls follows the address", () => {
 
     // the user edits the address while that socket is still open
     run.setEndpoint("ws://second/run");
-    flush();
+    tick();
     void lsClient.ls("/b").catch(() => {});
     expect(sockets.map((socket) => socket.url)).toEqual([
       "ws://first/run",

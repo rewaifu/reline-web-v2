@@ -1,15 +1,15 @@
 import {
   For,
   Show,
-  createSignal,
   createUniqueId,
-  onSettled,
+  onCleanup,
+  signal,
   useContext,
-  type Component,
-} from "solid-js";
+} from "reze-js";
 import { NodesDispatchContext } from "~/context/contexts";
 import { NodesActionType } from "~/types/actions";
 import type { NodeOptions, StackNode } from "~/types/node";
+import type { Component } from "~/types/component";
 import {
   Icon,
   Input,
@@ -102,6 +102,7 @@ const snapToStep = (value: number, step: number, dir: 1 | -1): number => {
  * or Enter and lands clamped. A number outside `min`/`max` is never stored, and
  * the steppers never step past the ends. */
 export const NumberField: Component<NumberFieldProps> = (props) => {
+  let draft = signal<string | undefined>(undefined);
   const clamp = (value: number) => {
     let v = value;
     if (props.min !== undefined) v = Math.max(props.min, v);
@@ -109,22 +110,20 @@ export const NumberField: Component<NumberFieldProps> = (props) => {
     return v;
   };
   const step = (dir: 1 | -1) => {
-    setDraft(undefined);
+    draft = undefined;
     props.onInput(
       clamp(snapToStep(props.value ?? props.min ?? 0, props.step ?? 1, dir)),
     );
   };
-  const [draft, setDraft] = createSignal<string>();
   const shown = () => {
-    const d = draft();
+    const d = draft;
     if (d !== undefined) return d;
     return props.value === undefined ? "" : String(props.value);
   };
-  // the committed value is read from the element, never from `draft()`:
-  // signal writes are deferred, so a blur landing in the same task as the
-  // last keystroke would commit the previous (stale) draft
+  // the committed value is read from the element: a blur landing right after
+  // the last keystroke must commit what the field shows, not a stale draft
   const commit = (value: string) => {
-    setDraft(undefined);
+    draft = undefined;
     if (value.trim() === "") return;
     const parsed = Number(value);
     if (Number.isFinite(parsed)) props.onInput(clamp(parsed));
@@ -143,7 +142,7 @@ export const NumberField: Component<NumberFieldProps> = (props) => {
         disabled={props.disabled}
         onInput={(e) => {
           const raw = e.currentTarget.value;
-          setDraft(raw);
+          draft = raw;
           const parsed = Number(raw);
           // inside the limits: follow as it is typed. Outside or incomplete:
           // keep the draft (the store keeps the old value) until commit.
@@ -366,15 +365,6 @@ export interface PathRowProps {
 
 const WEIGHT_EXTS = ["pth", "pt", "safetensors", "safetensor"];
 
-/** The path to send for `ls`. A bare name ("raws") means "complete in the
- * folder we are in", but splitting it gives an *empty* directory name: runner
- * builds that do not turn that into "." (`directory = directory or "."`) list
- * nothing and the field looks dead until the user types a slash. `./raws`
- * names the same folder, keeps the same last-segment prefix the server
- * matches on, and lists the same entries on every build. */
-const queryPath = (value: string): string =>
-  value.includes("/") ? value : `./${value}`;
-
 /** Directory part of a path, through the last slash (`/content/raw` →
  * `/content/`, a bare `raws` → ``). Focusing a field lists this whole
  * directory; the last-segment prefix filters only once editing starts. */
@@ -388,28 +378,27 @@ const dirOf = (value: string): string =>
 export const PathRow: Component<PathRowProps> = (props) => {
   const id = createUniqueId();
   const listId = createUniqueId();
-  const [entries, setEntries] = createSignal<string[]>([]);
-  const [dirs, setDirs] = createSignal<ReadonlySet<string>>(new Set());
-  const [open, setOpen] = createSignal(false);
+  let entries = signal<string[]>([]);
+  let dirs = signal<ReadonlySet<string>>(new Set());
+  let open = signal(false);
+  let active = signal(0);
   let lastDir = "";
   let mdbHits: MdbModel[] = [];
-  const [active, setActive] = createSignal(0);
   let timer: number | undefined;
   // monotonically increasing per lookup: a slow older response (fast typing
   // across the debounce boundary, mdb + ls interleaved) must never overwrite
   // the results of a newer query
   let seq = 0;
-  // direct refs — no getElementById walks
+  // element refs are read from event handlers and async continuations only
   let inputEl: HTMLInputElement | undefined;
   let listEl: HTMLUListElement | undefined;
 
-  onSettled(() => clearTimeout(timer));
+  onCleanup(() => clearTimeout(timer));
 
   const lookup = (value: string) => {
     clearTimeout(timer);
     const mine = ++seq;
-    // capture the props the async continuation needs: a reactive read inside
-    // a promise callback is untracked anyway, so read it once here
+    // capture the props the async continuation needs before it runs
     const source = props.source;
     const query = () => {
       const stale = () => mine !== seq;
@@ -421,41 +410,47 @@ export const PathRow: Component<PathRowProps> = (props) => {
             const q = (value.split("/").pop() ?? "").toLowerCase();
             const hits = all.filter((m) => m.name.toLowerCase().includes(q));
             mdbHits = hits;
-            setEntries(hits.map((m) => m.name));
-            setDirs(new Set<string>());
-            setActive(0);
-            setOpen(hits.length > 0);
+            entries = hits.map((m) => m.name);
+            dirs = new Set<string>();
+            active = 0;
+            open = hits.length > 0;
             if (listEl !== undefined) listEl.scrollTop = 0;
           })
           .catch(() => {
-            if (!stale()) setOpen(false);
+            if (!stale()) open = false;
           });
         return;
       }
       mdbHits = [];
+
+      // a bare name ("raws") means "complete in the folder we are in", but
+      // splitting it gives an *empty* directory name: runner builds that do
+      // not turn that into "." list nothing. `./raws` names the same folder,
+      // keeps the same last-segment prefix the server matches on.
       lsClient
-        .ls(queryPath(value), source === "weights" ? { ext: WEIGHT_EXTS } : {})
-        // the active() read is a deliberate current-index snapshot on landing
-        // oxlint-disable-next-line solid/reactivity
+        .ls(
+          value.includes("/") ? value : `./${value}`,
+          source === "weights" ? { ext: WEIGHT_EXTS } : {},
+        )
         .then((r) => {
           if (stale()) return;
-          const dirs = new Set(r.dirs);
+          const listed = new Set(r.dirs);
           // server returns raw readdir order — sort for a stable list
           let names = r.entries.slice().sort();
-          if (source === "dirs") names = names.filter((n) => dirs.has(n));
+          if (source === "dirs") names = names.filter((n) => listed.has(n));
           names = names.slice(0, 8);
-          setEntries(names);
-          setDirs(dirs);
+          entries = names;
+          dirs = listed;
           // fresh directory starts at the top; a re-listing of the same dir
           // (e.g. after arrow-reopen) keeps the highlighted row
           const dir = dirOf(value);
-          if (dir !== lastDir || names.length === 0) setActive(0);
-          else if (active() >= names.length) setActive(names.length - 1);
+          if (dir !== lastDir || names.length === 0) active = 0;
+          else if (active >= names.length) active = names.length - 1;
           lastDir = dir;
-          setOpen(names.length > 0);
+          open = names.length > 0;
           // rows were replaced: keep the highlighted row inside the viewport
           const ul = listEl;
-          const el = document.getElementById(`${listId}-${active()}`);
+          const el = document.getElementById(`${listId}-${active}`);
           if (ul !== undefined && el !== null) {
             if (
               el.offsetTop < ul.scrollTop ||
@@ -466,7 +461,7 @@ export const PathRow: Component<PathRowProps> = (props) => {
           }
         })
         .catch(() => {
-          if (!stale()) setOpen(false);
+          if (!stale()) open = false;
         });
     };
     // A warm model index answers from memory, so the debounce (which exists
@@ -480,7 +475,7 @@ export const PathRow: Component<PathRowProps> = (props) => {
 
   const complete = (name: string) => {
     const head = dirOf(props.value);
-    const isDir = dirs().has(name);
+    const isDir = dirs.has(name);
     const next = head + name + (isDir ? "/" : "");
     props.onInput(next);
     if (isDir) {
@@ -492,18 +487,16 @@ export const PathRow: Component<PathRowProps> = (props) => {
         const hit = mdbHits.find((m) => m.name === name);
         props.onPick?.(next, { url: hit?.url });
       }
-      setOpen(false);
+      open = false;
     }
   };
 
   const move = (delta: number) => {
-    const count = entries().length;
+    const count = entries.length;
     if (count === 0) return;
-    // solid 2 batches signal writes inside handlers: reading active() right
-    // after setActive yields the stale value, so keep the index in a local
     // clamp, not wrap: wrapping teleports the selection across the whole list
-    const next = Math.min(count - 1, Math.max(0, active() + delta));
-    setActive(next);
+    const next = Math.min(count - 1, Math.max(0, active + delta));
+    active = next;
     // keep the highlighted row inside the capped menu (it can hold ~6 rows)
     const ul = listEl;
     const el = document.getElementById(`${listId}-${next}`);
@@ -532,12 +525,12 @@ export const PathRow: Component<PathRowProps> = (props) => {
       <div class={styles.pathWrap}>
         <Input
           id={id}
-          ref={inputEl}
+          ref={(el) => (inputEl = el)}
           type="text"
-          role="combobox"
-          aria-expanded={open() ? "true" : "false"}
+          attr:role="combobox"
+          aria-expanded={open ? "true" : "false"}
           aria-controls={listId}
-          aria-activedescendant={open() ? `${listId}-${active()}` : undefined}
+          aria-activedescendant={open ? `${listId}-${active}` : undefined}
           autocomplete="off"
           placeholder={props.placeholder}
           value={props.value}
@@ -549,7 +542,7 @@ export const PathRow: Component<PathRowProps> = (props) => {
           // prefix filters only once the user starts editing
           onFocus={() => lookup(dirOf(props.value))}
           onBlur={() => {
-            setOpen(false);
+            open = false;
             if (props.source !== "mdb") return;
             const typed = props.value;
             const { onInput, onPick } = props;
@@ -564,52 +557,50 @@ export const PathRow: Component<PathRowProps> = (props) => {
                 onPick?.(hit.name, { url: hit.url });
               })
               // An unreachable mdb (offline, CDN hiccup, CORS) must not escape
-              // as an unhandled rejection — the console showed
-              // "Uncaught (in promise) TypeError: Failed to fetch" on every
-              // preset switch that blurred this field. The typed name stands
-              // and the next focus retries the lookup.
+              // as an unhandled rejection. The typed name stands and the next
+              // focus retries the lookup.
               .catch(() => undefined);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Escape") setOpen(false);
+            if (e.key === "Escape") open = false;
             // no candidates yet: arrows keep their normal caret semantics
-            if (entries().length === 0) return;
+            if (entries.length === 0) return;
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {
               // preventDefault stops the caret jump; reopen the menu if it
               // was closed (Esc / fresh focus) and refresh a stale listing
               e.preventDefault();
-              if (!open()) {
-                setOpen(true);
+              if (!open) {
+                open = true;
                 lookup(props.value);
               }
               move(e.key === "ArrowDown" ? 1 : -1);
-            } else if (open() && (e.key === "Tab" || e.key === "Enter")) {
+            } else if (open && (e.key === "Tab" || e.key === "Enter")) {
               e.preventDefault();
-              const picked = entries()[active()];
+              const picked = entries[active];
               if (picked !== undefined) complete(picked);
             }
           }}
         />
-        <Show when={open()}>
+        <Show when={open}>
           <div class={styles.pathMenu}>
             <ul
               id={listId}
-              ref={listEl}
+              ref={(el) => (listEl = el)}
               class={styles.pathMenuList}
-              role="listbox"
+              attr:role="listbox"
             >
-              <For each={entries()}>
+              <For each={entries}>
                 {(name, index) => (
                   <li>
                     <button
-                      id={`${listId}-${index()}`}
+                      id={`${listId}-${index}`}
                       type="button"
-                      class={index() === active() ? styles.active : undefined}
+                      class={index === active ? styles.active : undefined}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => complete(name)}
                     >
                       {name}
-                      {dirs().has(name) ? "/" : ""}
+                      {dirs.has(name) ? "/" : ""}
                     </button>
                   </li>
                 )}

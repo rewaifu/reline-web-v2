@@ -24,7 +24,7 @@ export type Capability = (typeof CAPABILITIES)[number];
 
 /** The host API generation a plugin is written for. A change that breaks
  * plugins bumps it, and old plugins are refused instead of misbehaving. */
-export const PLUGIN_API_VERSION = 1;
+export const PLUGIN_API_VERSION = 2;
 
 const PluginId = v.pipe(
   v.string(),

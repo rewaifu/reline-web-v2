@@ -11,7 +11,7 @@ import type { PluginManifestSource } from "../../sdk/vite";
 export const manifest: PluginManifestSource = {
   id: "reline.sequence",
   name: "Config sequence",
-  version: "1.2.0",
+  version: "1.3.0",
   description:
     "Build a pipeline out of several configs and run them one after another.",
   descriptions: {

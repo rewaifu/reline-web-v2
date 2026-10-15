@@ -1,6 +1,6 @@
-import { fireEvent, render } from "@solidjs/testing-library";
-import { createSignal, flush } from "solid-js";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { cleanup, fire, mount, tick } from "@rezejs/testing-library";
+import { signal } from "reze-js";
 import { setLocale, t } from "~/lib/i18n";
 import { SliderRow } from "./shared";
 
@@ -10,39 +10,45 @@ import { SliderRow } from "./shared";
 
 const setup = (start = 250, min = 0, max = 255, step = 1) => {
   const seen: number[] = [];
-  const [value, setValue] = createSignal(start);
-  const view = render(() => (
-    <SliderRow
-      label="High input"
-      value={value()}
-      min={min}
-      max={max}
-      step={step}
-      onInput={(next) => {
-        seen.push(next);
-        setValue(next);
-      }}
-    />
-  ));
-  const field = () => view.container.querySelector('input[type="number"]');
+  const view = mount(() => {
+    let value = signal(start);
+    return (
+      <SliderRow
+        label="High input"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onInput={(next: number) => {
+          seen.push(next);
+          value = next;
+        }}
+      />
+    );
+  });
+  const field = () =>
+    view.el.querySelector('input[type="number"]') as HTMLInputElement | null;
   const arrow = (dir: "up" | "down") =>
-    view.container.querySelector<HTMLButtonElement>(
+    view.el.querySelector<HTMLButtonElement>(
       `button[aria-label="${t(dir === "up" ? "ui.increase" : "ui.decrease", { label: "High input" })}"]`,
     );
   const type = (text: string) => {
     const el = field();
     if (el === null) throw new Error("no number field");
-    fireEvent.input(el, { target: { value: text } });
+    el.value = text;
+    fire(el, "input");
   };
   const blur = () => {
     const el = field();
     if (el === null) throw new Error("no number field");
-    fireEvent.blur(el);
+    fire(el, "blur");
   };
-  return { seen, value, field, arrow, type, blur };
+  return { seen, field, arrow, type, blur };
 };
 
 describe("slider row: entry and steppers respect the limits", () => {
+  afterEach(cleanup);
+
   beforeEach(() => setLocale("ru"));
 
   it("renders the arrows next to the value", () => {
@@ -111,13 +117,13 @@ describe("slider row: entry and steppers respect the limits", () => {
   it("snaps an off-grid value to the step grid instead of keeping the offset", () => {
     const { seen, arrow } = setup(500, 0, 2048, 128);
     arrow("up")?.click();
-    flush();
+    tick();
     expect(seen).toEqual([512]);
     arrow("up")?.click();
-    flush();
+    tick();
     expect(seen).toEqual([512, 640]);
     arrow("down")?.click();
-    flush();
+    tick();
     expect(seen).toEqual([512, 640, 512]);
   });
 });

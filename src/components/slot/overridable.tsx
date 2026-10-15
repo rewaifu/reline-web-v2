@@ -1,11 +1,12 @@
-import { Errored, type Accessor, type Component } from "solid-js";
-import { Dynamic } from "@solidjs/web";
+import { dynamic } from "reze-js";
+import { Errored } from "~/components/errored/errored";
 import { pipeline } from "~/lib/pipeline/hooks";
 import {
   uiRegistry,
   type OverridableId,
   type OverrideProps,
 } from "~/lib/ui/registry";
+import type { Component } from "~/types/component";
 
 /** One override on top of what it replaces. If it throws while rendering, the
  * previous component is rendered in its place — a broken plugin degrades the
@@ -16,16 +17,20 @@ const guarded = <P extends object>(
   next: Component<P>,
   previous: Component<P>,
 ): Component<P> => {
-  const Guarded: Component<P> = (props) => (
-    <Errored
-      fallback={(error: Accessor<unknown>) => {
-        pipeline.report("ui", `${owner}:${id}`, error());
-        return <Dynamic component={previous} {...props} />;
-      }}
-    >
-      <Dynamic component={next} {...props} />
-    </Errored>
-  );
+  const Guarded: Component<P> = (props) => {
+    const Next = next;
+    const Previous = previous;
+    return (
+      <Errored
+        fallback={(error: () => unknown) => {
+          pipeline.report("ui", `${owner}:${id}`, error());
+          return <Previous {...props} />;
+        }}
+      >
+        <Next {...props} />
+      </Errored>
+    );
+  };
   return Guarded;
 };
 
@@ -48,42 +53,58 @@ const identityOf = (entry: object): number => {
   return id;
 };
 
+/** Identifies the override chain of `id`: it changes exactly when the chain
+ * does, so a caller that renders the chain once can rebuild when this changes. */
+export const overrideKey = (id: OverridableId): string =>
+  uiRegistry.overridesFor(id).map(identityOf).join(",");
+
+/** The component to render for `id` right now: the host's `Base` with every
+ * override stacked on top of it. Not reactive — read it where the instance is
+ * built, and rebuild the instance when `overrideKey(id)` changes. */
+export const resolveOverride = <I extends OverridableId>(
+  id: I,
+  Base: Component<OverrideProps[I]>,
+): Component<OverrideProps[I]> => {
+  const list = uiRegistry.overridesFor(id);
+  if (list.length === 0) return Base;
+  const key = list.map(identityOf).join(",");
+  const hit = cache.get(id);
+  if (hit !== undefined && hit.base === Base && hit.key === key)
+    return hit.component as Component<OverrideProps[I]>;
+  let current = Base;
+  for (const entry of list) {
+    // the registry stores wraps with their prop types erased; this id's
+    // props are what they were registered for
+    const wrap = entry.wrap as unknown as (
+      previous: Component<OverrideProps[I]>,
+    ) => Component<OverrideProps[I]>;
+    current = guarded(id, entry.owner, wrap(current), current);
+  }
+  cache.set(id, { base: Base, key, component: current });
+  return current;
+};
+
 /**
  * Make a host component replaceable. The host renders `Overridable` wherever it
  * rendered the original; with no override it is the original, with some it is
- * the chain they build.
+ * the chain they build. It follows the override list live, which makes its
+ * output a binding — fine inside an element, but a list row must not be one
+ * (every change of the list would rebuild all rows): rows use `resolveOverride`
+ * and rebuild on `overrideKey`.
  */
 export const overridable = <I extends OverridableId>(
   id: I,
   Base: Component<OverrideProps[I]>,
 ): Component<OverrideProps[I]> => {
   const Overridable: Component<OverrideProps[I]> = (props) => {
-    const resolved = (): Component<OverrideProps[I]> => {
-      const list = uiRegistry.overridesFor(id);
-      if (list.length === 0) return Base;
-      const key = list.map(identityOf).join(",");
-      const hit = cache.get(id);
-      if (hit !== undefined && hit.base === Base && hit.key === key)
-        return hit.component as Component<OverrideProps[I]>;
-      let current = Base;
-      for (const entry of list) {
-        // the registry stores wraps with their prop types erased; this id's
-        // props are what they were registered for
-        const wrap = entry.wrap as unknown as (
-          previous: Component<OverrideProps[I]>,
-        ) => Component<OverrideProps[I]>;
-        current = guarded(id, entry.owner, wrap(current), current);
-      }
-      cache.set(id, { base: Base, key, component: current });
-      return current;
-    };
-    // `Dynamic` is generic over one props type; this id's is `OverrideProps[I]`
-    return (
-      <Dynamic
-        component={resolved() as unknown as Component<Record<string, unknown>>}
-        {...(props as unknown as Record<string, unknown>)}
-      />
+    // one component per instance: the source re-runs when the override list changes
+    const Current = dynamic(
+      () =>
+        resolveOverride(id, Base) as unknown as Component<
+          Record<string, unknown>
+        >,
     );
+    return <Current {...(props as unknown as Record<string, unknown>)} />;
   };
   return Overridable;
 };

@@ -1,12 +1,5 @@
-import {
-  type Component,
-  For,
-  Show,
-  createEffect,
-  createSignal,
-  useContext,
-} from "solid-js";
-import type { Store } from "solid-js";
+import { For, Show, effect, signal, untrack, useContext } from "reze-js";
+import type { Component } from "~/types/component";
 import {
   AnalysisContext,
   NodesContext,
@@ -20,7 +13,11 @@ import { useToggleEnabled } from "~/hooks/use-node-actions";
 import { nodeLabel } from "~/lib/nodes";
 import { NodeOptionsForm } from "~/components/nodes/node-options-form";
 import { Slot } from "~/components/slot/slot";
-import { overridable } from "~/components/slot/overridable";
+import {
+  overridable,
+  overrideKey,
+  resolveOverride,
+} from "~/components/slot/overridable";
 import { NodeSwap } from "~/components/node-swap/node-swap";
 import { DiagnosticList } from "~/components/diagnostics/diagnostic-list";
 import { Icon, UiSwitch } from "~/components/ui";
@@ -32,7 +29,7 @@ export interface NodeCardProps {
   node: StackNode;
   /** Position in the stack — drag state is index-based. */
   index: number;
-  /** Keyed projection: only the entering/leaving rows recompute on a click. */
+  /** Selection state of this row (a selector built once by the stack). */
   selected: boolean;
   onSelect: (uid: string) => void;
   dragIndex: () => number | null;
@@ -48,22 +45,10 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
   const dispatch = useContext(NodesDispatchContext);
   const toggleEnabled = useToggleEnabled();
   const analysis = useContext(AnalysisContext);
-  const [editing, setEditing] = createSignal(false);
-  const [draft, setDraft] = createSignal("");
-  let renameInput: HTMLInputElement | undefined;
-  // the rename input mounts on demand — grab focus and select the text so
-  // typing replaces the name right away
-  createEffect(
-    () => editing(),
-    (isEditing) => {
-      if (!isEditing) return;
-      renameInput?.focus();
-      renameInput?.select();
-    },
-  );
+  let editing = signal(false);
+  let draft = signal("");
 
-  const node = () => props.node;
-  const findings = () => analysis().byUid.get(node().uid) ?? [];
+  const findings = () => analysis().byUid.get(props.node.uid) ?? [];
   // the worst finding tints the card edge, so a folded card still says so
   const worst = () =>
     findings().some((d) => d.severity === "error")
@@ -75,19 +60,19 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
   const change = (patch: Partial<StackNode>) => {
     dispatch({
       type: NodesActionType.CHANGE,
-      payload: { uid: node().uid, ...patch },
+      payload: { uid: props.node.uid, ...patch },
     });
   };
 
   const startRename = () => {
-    setDraft(node().name ?? "");
-    setEditing(true);
+    draft = props.node.name ?? "";
+    editing = true;
   };
 
   const commitRename = () => {
-    const value = draft().trim();
+    const value = draft.trim();
     change({ name: value === "" ? undefined : value });
-    setEditing(false);
+    editing = false;
   };
 
   return (
@@ -99,41 +84,39 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
         }}
       />
       <section
-        data-node-id={node().uid}
-        data-flip-key={node().uid}
+        data-node-id={props.node.uid}
+        data-flip-key={props.node.uid}
         data-diagnostics={worst()}
         class={{
           [styles.card]: true,
           [styles.selected]: props.selected,
-          [styles.disabled]: node().enabled === false,
+          [styles.disabled]: props.node.enabled === false,
           [styles.dragging]: props.dragIndex() === props.index,
         }}
-        onClick={() => props.onSelect(node().uid)}
+        onClick={() => props.onSelect(props.node.uid)}
       >
         <header
           class={styles.header}
           onClick={(e) => {
-            props.onSelect(node().uid);
+            props.onSelect(props.node.uid);
             // A single click anywhere on the strip folds the node — the name
-            // included. It used to be excluded because the title is a span
-            // with its own handler, which also stopped the event: the wide
-            // empty stretch beside the name (the title is `flex: 1`, so that
-            // stretch is *inside* it) swallowed the first click and the card
-            // opened only on the second. Only the grip is left out: a press
-            // there is a drag, and a drop would otherwise fold the card it
-            // just dropped.
+            // included. The title is `flex: 1`, so the empty stretch beside
+            // the name is part of it; no handler on the title may stop the
+            // event there, or the first click would be swallowed. Only the
+            // grip is left out: a press there is a drag, and a drop would
+            // otherwise fold the card it just dropped.
             if (
               e.target instanceof Element &&
               e.target.closest("[data-drag-handle]") !== null
             )
               return;
-            change({ collapsed: !node().collapsed });
+            change({ collapsed: !props.node.collapsed });
           }}
         >
           <span
             class={styles.dragHandle}
             data-drag-handle
-            role="button"
+            attr:role="button"
             tabindex="0"
             aria-label={t("chrome.reorder")}
             title={t("chrome.reorderTitle")}
@@ -150,10 +133,10 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
             onDblClick={(e) => e.stopPropagation()}
           >
             <UiSwitch
-              checked={node().enabled !== false}
-              onChange={(enabled) => toggleEnabled(node(), enabled)}
+              checked={props.node.enabled !== false}
+              onChange={(enabled) => toggleEnabled(props.node, enabled)}
               ariaLabel={t("chrome.enable", {
-                name: node().name ?? nodeLabel(node().type),
+                name: props.node.name ?? nodeLabel(props.node.type),
               })}
             />
           </span>
@@ -170,20 +153,27 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
             <Icon name="pencil" size={13} />
           </button>
           <Show
-            when={!editing()}
+            when={!editing}
             fallback={
               <input
-                ref={(el) => (renameInput = el)}
+                ref={(el) => {
+                  // the input mounts on demand: focus and select the text once
+                  // it is in the document, so typing replaces the name right away
+                  queueMicrotask(() => {
+                    el.focus();
+                    el.select();
+                  });
+                }}
                 class={styles.renameInput}
-                value={draft()}
-                placeholder={node().name ?? nodeLabel(node().type)}
+                value={draft}
+                placeholder={props.node.name ?? nodeLabel(props.node.type)}
                 aria-label={t("chrome.nodeName")}
                 onClick={(e) => e.stopPropagation()}
-                onInput={(e) => setDraft(e.currentTarget.value)}
+                onInput={(e) => (draft = e.currentTarget.value)}
                 onBlur={commitRename}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") commitRename();
-                  else if (e.key === "Escape") setEditing(false);
+                  else if (e.key === "Escape") editing = false;
                 }}
               />
             }
@@ -193,15 +183,17 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
                 its own zone — which is exactly what broke the first click. */}
             <span class={styles.title}>
               <span class={styles.titleText}>
-                {node().name ?? nodeLabel(node().type)}
+                {props.node.name ?? nodeLabel(props.node.type)}
               </span>
-              <Show when={node().name}>
-                <span class={styles.typeHint}>{nodeLabel(node().type)}</span>
+              <Show when={props.node.name}>
+                <span class={styles.typeHint}>
+                  {nodeLabel(props.node.type)}
+                </span>
               </Show>
             </span>
           </Show>
-          <Slot name="node.card.header" context={{ node: node() }} />
-          <NodeSwap node={node()} />
+          <Slot name="node.card.header" context={{ node: props.node }} />
+          <NodeSwap node={props.node} />
           <Show when={!props.phone}>
             <button
               type="button"
@@ -210,7 +202,10 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
               title={t("chrome.remove")}
               onClick={(e) => {
                 e.stopPropagation();
-                dispatch({ type: NodesActionType.DELETE, payload: node().uid });
+                dispatch({
+                  type: NodesActionType.DELETE,
+                  payload: props.node.uid,
+                });
               }}
             >
               <Icon name="trash" size={13} />
@@ -220,22 +215,24 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
             type="button"
             class={styles.chevron}
             aria-label={t("chrome.collapse")}
-            aria-expanded={node().collapsed === false ? "true" : "false"}
+            aria-expanded={props.node.collapsed === false ? "true" : "false"}
             onClick={(e) => {
               e.stopPropagation();
-              change({ collapsed: !node().collapsed });
+              change({ collapsed: !props.node.collapsed });
             }}
           >
             <Icon
               name={
-                node().collapsed === false ? "chevron-down" : "chevron-right"
+                props.node.collapsed === false
+                  ? "chevron-down"
+                  : "chevron-right"
               }
               size={14}
             />
           </button>
         </header>
-        <Show when={node().collapsed === false}>
-          <div class={styles.separator} role="separator" />
+        <Show when={props.node.collapsed === false}>
+          <div class={styles.separator} attr:role="separator" />
           {/* Destructive action, phone edition: out of the always-visible
               strip (where a stray thumb costs a node) and into the expanded
               body, with a label that says what it deletes. */}
@@ -249,7 +246,7 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
                   e.stopPropagation();
                   dispatch({
                     type: NodesActionType.DELETE,
-                    payload: node().uid,
+                    payload: props.node.uid,
                   });
                 }}
               >
@@ -259,19 +256,19 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
             </div>
           </Show>
           <DiagnosticList items={findings()} class={styles.findings} />
-          <NodeBody node={node()} />
-          <Slot name="node.card.footer" context={{ node: node() }} />
+          <NodeBody node={props.node} />
+          <Slot name="node.card.footer" context={{ node: props.node }} />
         </Show>
       </section>
     </>
   );
 };
 
-const NodeCardView = overridable("NodeCard", NodeCardImpl);
-
 export interface NodeCardsProps {
   selectedUid: () => string | null;
-  isSelected: Store<Record<string, boolean>>;
+  /** Per-row selection check: only the rows whose state changes re-render on
+   * a click (a selector built once by the caller). */
+  isSelected: (uid: string) => boolean;
   onSelect: (uid: string) => void;
   /** Phone: there is no node list, so the card carries what the list did. */
   phone: boolean;
@@ -279,7 +276,8 @@ export interface NodeCardsProps {
 export const NodeStack: Component<NodeCardsProps> = (props) => {
   const nodes = useContext(NodesContext);
   const dispatch = useContext(NodesDispatchContext);
-  let stack: HTMLDivElement | undefined;
+  // the drag hook tracks the container, so it is a signal the ref writes
+  let stack = signal<HTMLDivElement | undefined>(undefined);
   const { dragIndex, dropIndex, handlers } = createDragReorder(
     () => stack,
     (from, to) => {
@@ -296,41 +294,65 @@ export const NodeStack: Component<NodeCardsProps> = (props) => {
     },
   );
 
-  // selecting a node in the left list scrolls its card into view
-  createEffect(
-    () => props.selectedUid(),
-    (uid) => {
-      if (uid === null) return;
-      if (stack === undefined) return;
-      const card = stack.querySelector(`[data-node-id="${uid}"]`);
+  // selecting a node in the left list scrolls its card into view. Deferred to a
+  // microtask: the stack element is only set once it has rendered.
+  effect(() => {
+    const uid = props.selectedUid();
+    if (uid === null) return;
+    queueMicrotask(() => {
+      const el = untrack(() => stack);
+      if (el === undefined) return;
+      const card = el.querySelector(`[data-node-id="${uid}"]`);
       if (card === null) return;
       // a click on the card itself selects too — scrolling a visible card
       // would glide the layout mid double-click and kill the rename; reveal
       // only cards that are (partially) outside the stack viewport
       const rect = card.getBoundingClientRect();
-      const box = stack.getBoundingClientRect();
+      const box = el.getBoundingClientRect();
       if (rect.top >= box.top && rect.bottom <= box.bottom) return;
       card.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    },
-  );
+    });
+  });
+
+  // Rows are built from the override chain as it is when the list is built, and
+  // the list is rebuilt when the chain changes. A row that followed the chain
+  // itself would be a binding, and a list of bindings rebuilds every row on any
+  // add, move or delete — each card would lose its form state and focus.
+  // An override is guarded by an `Errored`, which is a binding too, so with one
+  // active every row sits in a `display: contents` element (no layout effect)
+  // to stay a plain node for the list.
+  const cards = (chain: string) => {
+    const Card = resolveOverride("NodeCard", NodeCardImpl);
+    const Row: Component<NodeCardProps> =
+      chain === ""
+        ? Card
+        : (rowProps) => (
+            <div style={{ display: "contents" }}>
+              <Card {...rowProps} />
+            </div>
+          );
+    return (
+      <For each={nodes}>
+        {(node, index) => (
+          <Row
+            node={node}
+            index={index}
+            selected={props.isSelected(node.uid)}
+            onSelect={props.onSelect}
+            dragIndex={dragIndex}
+            dropIndex={dropIndex}
+            handlers={handlers}
+            phone={props.phone}
+          />
+        )}
+      </For>
+    );
+  };
 
   return (
     <>
-      <div class={styles.stack} ref={stack}>
-        <For each={nodes}>
-          {(node, index) => (
-            <NodeCardView
-              node={node}
-              index={index()}
-              selected={props.isSelected[node.uid] === true}
-              onSelect={props.onSelect}
-              dragIndex={dragIndex}
-              dropIndex={dropIndex}
-              handlers={handlers}
-              phone={props.phone}
-            />
-          )}
-        </For>
+      <div class={styles.stack} ref={(el) => (stack = el)}>
+        {cards(overrideKey("NodeCard"))}
         <div
           class={{
             [styles.dropPlaceholder]: true,

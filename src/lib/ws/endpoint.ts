@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { signal } from "reze-js";
 import { storage } from "~/lib/storage";
 
 const RUN_ENDPOINT_KEY = "reline-web:runEndpoint";
@@ -31,10 +31,10 @@ const initialEndpoint = (): string => {
  * run vanished on the next tab switch — the app looked like it ignored the
  * address entirely.
  */
-const [endpoint, setEndpointSignal] = createSignal(initialEndpoint());
-export { endpoint };
+let current = signal(initialEndpoint());
+export const endpoint = (): string => current;
 export const setEndpoint = (value: string) => {
-  setEndpointSignal(value);
+  current = value;
   // private mode or a full quota: the field keeps the value in memory
   storage.set(RUN_ENDPOINT_KEY, value);
   dropApiParam();

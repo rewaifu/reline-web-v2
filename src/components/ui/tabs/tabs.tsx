@@ -1,14 +1,15 @@
 import {
-  createEffect,
-  createMemo,
-  createSignal,
-  omit,
-  untrack,
-  type Component,
   For,
-} from "solid-js";
-import type { JSX } from "@solidjs/web";
-import { Tabs } from "@rebase-ui/solid/tabs";
+  computed,
+  effect,
+  splitProps,
+  onCleanup,
+  signal,
+  untrack,
+  type JSX,
+} from "reze-js";
+import type { Component } from "~/types/component";
+import { Tabs } from "@rebase-ui/reze/tabs";
 import { render, t, type LocalText } from "~/lib/i18n";
 import { UiSelect } from "../select/select";
 import { fitTabs } from "./fit";
@@ -42,15 +43,21 @@ const sameSet = (a: ReadonlySet<number> | undefined, b: ReadonlySet<number>) =>
  * tab list for the roving focus and the panel wiring.
  */
 export const UiTabs: Component<UiTabsProps> = (props) => {
-  const rest = omit(props, "value", "onChange", "tabs", "content", "class");
+  const [, rest] = splitProps(props, [
+    "value",
+    "onChange",
+    "tabs",
+    "content",
+    "class",
+  ]);
   // indexes kept on the row; undefined until measured (everything shows)
-  const [kept, setKept] = createSignal<ReadonlySet<number> | undefined>();
-  let strip: HTMLDivElement | undefined;
-  let list: HTMLDivElement | undefined;
-  let burger: HTMLButtonElement | undefined;
+  let kept = signal<ReadonlySet<number> | undefined>(undefined);
+  let strip = signal<HTMLDivElement | undefined>(undefined);
+  let list = signal<HTMLDivElement | undefined>(undefined);
+  let burger = signal<HTMLButtonElement | undefined>(undefined);
 
-  const onRow = (index: number) => kept()?.has(index) ?? true;
-  const overflow = createMemo(() =>
+  const onRow = (index: number) => kept?.has(index) ?? true;
+  const overflow = computed(
     props.tabs.flatMap((tab, i) => (onRow(i) ? [] : [tab])),
   );
   const labelOf = (value: string) => {
@@ -58,36 +65,41 @@ export const UiTabs: Component<UiTabsProps> = (props) => {
     return tab === undefined ? value : render(tab.label);
   };
 
-  const measure = () => {
+  const measure = (selected: string, tabs: readonly UiTabDef[]) => {
     if (strip === undefined || list === undefined || burger === undefined)
       return;
     const triggers = [...list.querySelectorAll<HTMLElement>('[role="tab"]')];
     const next = fitTabs({
       widths: triggers.map((trigger) => trigger.offsetWidth),
-      active: props.tabs.findIndex((tab) => tab.value === props.value),
+      active: tabs.findIndex((tab) => tab.value === selected),
       available: strip.clientWidth,
       gap: parseFloat(getComputedStyle(list).columnGap) || 0,
       menu: burger.offsetWidth,
     });
-    if (!sameSet(kept(), next)) setKept(next);
+    if (!sameSet(kept, next)) kept = next;
   };
 
-  // re-fit when the tabs, their wording (language) or the selection change, and
-  // whenever the strip or any tab changes size (window, fonts)
-  createEffect(
-    () => [props.value, props.tabs.map((tab) => render(tab.label)).join("\0")],
-    () => {
-      // the measurement reads the tabs and the selection itself; the compute
-      // above is what subscribes to them
-      untrack(measure);
-      if (strip === undefined || list === undefined) return;
-      const observer = new ResizeObserver(measure);
-      observer.observe(strip);
-      for (const trigger of list.querySelectorAll('[role="tab"]'))
+  // re-fit when the selection or the tab set changes (the refs arrive after
+  // mount, so the strip, the row and the burger are read to subscribe to them);
+  // label width changes reach the observer through the tabs' own sizes
+  effect(() => {
+    const selected = props.value;
+    const tabs = props.tabs;
+    const bar = strip;
+    const row = list;
+    if (bar === undefined || row === undefined || burger === undefined) return;
+    untrack(() => {
+      measure(selected, tabs);
+      // whenever the strip or any tab changes size (window, fonts, wording)
+      const observer = new ResizeObserver(() =>
+        measure(props.value, props.tabs),
+      );
+      observer.observe(bar);
+      for (const trigger of row.querySelectorAll('[role="tab"]'))
         observer.observe(trigger);
-      return () => observer.disconnect();
-    },
-  );
+      onCleanup(() => observer.disconnect());
+    });
+  });
 
   return (
     <Tabs.Root
@@ -96,37 +108,41 @@ export const UiTabs: Component<UiTabsProps> = (props) => {
       value={props.value}
       onValueChange={(value) => props.onChange(value)}
     >
-      <div ref={strip} class={styles.strip}>
-        <Tabs.List ref={list} class={styles.list}>
+      <div ref={(el) => (strip = el)} class={styles.strip}>
+        <Tabs.List ref={(el) => (list = el)} class={styles.list}>
           <For each={props.tabs}>
             {(tab, index) => (
               <Tabs.Tab
                 value={tab.value}
                 class={styles.trigger}
                 // out of the flow, unfocusable and skipped by the arrow keys
-                disabled={!onRow(index())}
-                data-overflow={onRow(index()) ? undefined : ""}
+                disabled={!onRow(index)}
+                data-overflow={onRow(index) ? undefined : ""}
               >
-                {render(tab.label)}
+                {/* the tab reads its children once: the fragment's binding is
+                    what follows a language switch */}
+                <>{render(tab.label)}</>
               </Tabs.Tab>
             )}
           </For>
         </Tabs.List>
         <UiSelect
-          ref={burger}
+          ref={(el) => (burger = el)}
           variant="icon"
           class={styles.burger}
           // measured while idle, so it stays in the DOM and only leaves the flow
-          data-idle={overflow().length === 0 ? "" : undefined}
+          data-idle={overflow.length === 0 ? "" : undefined}
           value={null}
-          items={overflow().map((tab) => tab.value)}
+          items={overflow.map((tab) => tab.value)}
           itemLabel={labelOf}
           onChange={props.onChange}
           ariaLabel={t("ui.moreTabs")}
         />
       </div>
       <Tabs.Panel value={props.value} class={styles.content}>
-        {props.content(props.value)}
+        {/* the panel reads its children once: the fragment's own binding is what
+            follows the selected value */}
+        <>{props.content(props.value)}</>
       </Tabs.Panel>
     </Tabs.Root>
   );

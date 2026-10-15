@@ -1,4 +1,4 @@
-import type { Component } from "solid-js";
+import type { Component } from "~/types/component";
 import type * as v from "valibot";
 import type { Locale, LocalText } from "~/lib/i18n";
 import type { Diagnostic } from "~/lib/pipeline/types";

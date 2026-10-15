@@ -1,5 +1,6 @@
 import type { StackNode } from "~/types/node";
-import { type Component, For, Show } from "solid-js";
+import { For, Show } from "reze-js";
+import type { Component } from "~/types/component";
 import { DotType, HalftoneMode } from "~/types/enums";
 import {
   useNodeForm,
@@ -66,10 +67,9 @@ export const ScreentoneForm: Component<FormProps> = (props) => {
   const options = () => form.options() as ScreentoneNodeOptions;
   const multi = () => channels().length > 1;
   // A tree saved by an older build can name a mode this build no longer has
-  // (or a hand-edited config can invent one). Looking that up returns
-  // undefined, which reaches `<For>` and throws *during render* — the kind of
-  // error that halts Solid's reactive system. Show the default channel set
-  // instead; the select still shows what is actually stored.
+  // (or a hand-edited config can invent one). That lookup yields undefined,
+  // and the channel list would throw during render. Show the default channel
+  // set instead; the select still shows what is actually stored.
   const channels = () =>
     CHANNELS[options().halftone_mode] ?? CHANNELS[HalftoneMode.GRAY];
   const changeMode = (next: HalftoneMode) => {
@@ -167,25 +167,25 @@ export const ScreentoneForm: Component<FormProps> = (props) => {
               </p>
               <SliderRow
                 label={t("form.screentone.dotSize")}
-                value={num("dot_size", i())}
+                value={num("dot_size", i)}
                 min={1}
                 max={128}
                 step={1}
-                onInput={(value) => setNum("dot_size", i(), value)}
+                onInput={(value) => setNum("dot_size", i, value)}
               />
               <SliderRow
                 label={t("form.screentone.angle")}
-                value={num("angle", i())}
+                value={num("angle", i)}
                 min={0}
                 max={180}
                 step={1}
-                onInput={(value) => setNum("angle", i(), value)}
+                onInput={(value) => setNum("angle", i, value)}
               />
               <ComboboxRow
                 label={t("form.screentone.dotType")}
-                value={dtypeAt(i())}
+                value={dtypeAt(i)}
                 items={DOT_TYPES}
-                onChange={(value) => setDtype(i(), value as DotType)}
+                onChange={(value) => setDtype(i, value as DotType)}
               />
             </div>
           )}

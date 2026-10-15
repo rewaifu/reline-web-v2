@@ -10,8 +10,8 @@ description: >
 
 # Writing a Reline Web plugin
 
-A plugin = **one ES module + `plugin.json`**, installed by link. Solid is **2.0-rc.6** (not 1.x) —
-read `reline-web` §"Solid 2 traps" before writing reactive code. Canonical human doc:
+A plugin = **one ES module + `plugin.json`**, installed by link. Reactivity is **Reze** (`reze-js`) —
+read the `reline-web` skill before writing reactive code. Canonical human doc:
 `docs/PLUGINS.en.md`. Working samples: `examples/sequence` (page tier, UI + run + storage),
 `examples/writer-suffix` (worker tier, no build).
 
@@ -19,7 +19,7 @@ read `reline-web` §"Solid 2 traps" before writing reactive code. Canonical huma
 
 | Tier                  | Runs in                      | Gets                                                             | Use when                                            |
 | --------------------- | ---------------------------- | ---------------------------------------------------------------- | --------------------------------------------------- |
-| `page` (default)      | the editor page, full rights | `api` with the granted namespaces, host Solid, UI kit            | new nodes, UI, store, WS methods, any non-run hook  |
+| `page` (default)      | the editor page, full rights | `api` with the granted namespaces, host Reze, UI kit             | new nodes, UI, store, WS methods, any non-run hook  |
 | `"sandbox": "worker"` | Web Worker, no DOM/storage   | `api.id`, `api.version`, `api.log`, `api.pipeline.beforeRun(fn)` | you only rewrite the run config just before sending |
 
 `caps` on a `page` plugin are **consent information, not a sandbox**. Only `worker` is enforced; a worker
@@ -57,8 +57,8 @@ export default {
 ```
 
 `activate` runs once, may be `async` (5 s limit), may return a cleanup. Everything registered through `api.*`
-is removed on disable. Always present: `api.id`, `api.version`, `api.apiVersion`, `api.solid`, `api.web`,
-`api.log(...parts)`, `api.onDispose(fn)`.
+is removed on disable. Always present: `api.id`, `api.version`, `api.apiVersion`,
+`api.log(...parts)`, `api.onDispose(fn)`. Reze is imported from `reze-js`; the build rewrites it to the editor's copy.
 
 ## 3. Manifest (`plugin.json`)
 
@@ -148,16 +148,12 @@ run, return an `error` from `validate` (throwing in `beforeRun` refuses nothing)
 
 ## 6. Rules that prevent the usual breakage
 
-- **Solid only from the host**: the SDK's `relinePlugin()` rewrites `solid-js`/`@solidjs/web` imports to
-  `globalThis.__RELINE__`. A plugin's own Solid copy never updates the page.
-- **An uncaught error inside an effect halts all reactivity** (error boundaries do not catch it): wrap effect bodies
-  in `try/catch`.
-- **Effects are split**: `createEffect(() => reactiveReads, (value) => sideEffect)`. Do not read signals/stores in the
-  apply function (`STRICT_READ_UNTRACKED`) — use `untrack`. `onSettled` callbacks must not return a value.
-- **Signal writes are deferred** in Solid 2: reading right after a write gives the old value; keep a plain variable
-  plus a revision signal when you need read-after-write.
-- **Never `JSON.stringify(store)` inside an effect** (thousands of subscriptions, `HUGE_FAN_IN`): bump a revision
-  counter in your setter and serialise with `untrack` in the apply.
+- **Reze only from the host**: the SDK's `relinePlugin()` rewrites `reze-js` imports to
+  `globalThis.__RELINE__`. A plugin's own Reze copy never updates the page.
+- **Errors inside an effect**: wrap effect bodies in `try/catch`.
+- **Effects are one function**: read reactive values in the body; side effects go in `untrack(...)`. Teardown goes in `onCleanup`.
+- **Never `JSON.stringify(store)` inside an effect** (thousands of subscriptions): bump a revision
+  counter in your setter and serialise with `untrack` in the effect.
 - **Every string in ru and en** (`api.i18n.add` twice); tab/node/diagnostic text as `LocalText` (`api.i18n.text`), not a
   frozen string.
 - **UI**: `api.ui.kit` controls; tokens `--color-*`, `--space-*`, `--radius-*`, `--font-size-*` (never hex colours);
@@ -222,7 +218,7 @@ toolbar badge + sequential runs → `examples/sequence/src/index.tsx`; worker re
 - Build: `relinePlugin({ manifest: { id, name, version, caps, description?, descriptions? } })` in `vite.config.ts` (see
   `examples/sequence/vite.config.ts`); `vite build` writes the module and `plugin.json` with `integrity`.
 - In this repo: `pnpm plugin:build` (sequence + catalog), `pnpm plugin:pin` (no-build example →
-  `public/plugins/examples/writer-suffix/`, **outside the catalog**), `pnpm plugin:catalog`, `pnpm sdk:exports` after a Solid
+  `public/plugins/examples/writer-suffix/`, **outside the catalog**), `pnpm plugin:catalog`, `pnpm sdk:exports` after a Reze
   upgrade. CI rebuilds and `git diff --exit-code -- public/plugins`.
 - **Catalog** = `public/plugins/index.json`, generated from `public/plugins/<name>/plugin.json` (top level only). Each entry
   carries id, name, version, description(s), caps, sandbox, manifest path and the code `integrity`; installing from it refuses
@@ -237,13 +233,13 @@ toolbar badge + sequential runs → `examples/sequence/src/index.tsx`; worker re
 Run the real plugin source against the real API: `createPluginApi` + a real stack; replace only `runClient` (see
 `examples/sequence/sequence.test.tsx`). Tests that need a fresh module graph use `vi.resetModules()` and a stubbed
 `localStorage`; jsdom cannot import Blob URLs or create Workers — use `setModuleLoader` / `setWorkerFactory`.
-`@solidjs/testing-library` does not auto-clean (no globals): call `cleanup()` in `afterEach`; call `flush()` after
+`@rezejs/testing-library` does not auto-clean: call `cleanup()` in `afterEach`; call `tick()` after
 signal writes. Popover components need `@floating-ui/dom` mocked in jsdom.
 
 ## 10. Review checklist
 
 1. Right tier; minimal `caps`; `id` format; every owned name prefixed.
-2. Solid from the host; effects split, guarded, no reactive reads in apply; no store serialisation in effects.
+2. Reze from the host; one-function effects with side effects in `untrack`; no store serialisation in effects.
 3. UI from `ui.kit` + tokens; ru **and** en strings; `label` on icon buttons.
 4. `validate` diagnostics have `severity` and a `LocalText` message; `beforeRun` is async-safe and idempotent.
 5. Version bumped; hash rebuilt (`plugin.json` regenerated, not edited); `description` + `descriptions`.

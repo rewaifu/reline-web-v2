@@ -6,11 +6,11 @@ import {
   shift,
   size,
 } from "@floating-ui/dom";
-import { createEffect } from "solid-js";
+import { effect, onCleanup, untrack } from "reze-js";
 
 export type MenuPlacement = "bottom-start" | "bottom-end" | "top-start";
 
-/** Portaled menu positioning (replaces the Kobalte popper): fixed under the
+/** Portaled menu positioning: fixed under the
  * anchor with a 4px gutter, flipping to the other side when there is no
  * room. The content keeps `position: fixed` from its stylesheet; coordinates
  * and `--menu-available-height` land inline. Stays hidden until the first
@@ -26,42 +26,44 @@ export const createMenuPosition = (
    * `visibility: hidden` refuses focus). */
   onPlaced?: () => void,
 ): void => {
-  createEffect(open, (isOpen) => {
-    if (!isOpen) return;
+  effect(() => {
+    if (!open()) return;
     const anchorEl = anchor();
     const contentEl = content();
     if (anchorEl === undefined || contentEl === undefined) return;
-    contentEl.style.visibility = "hidden";
-    let placed = false;
-    const update = () => {
-      void computePosition(anchorEl, contentEl, {
-        placement: placement(),
-        middleware: [
-          offset(gutter),
-          flip({ padding: 8 }),
-          shift({ padding: 8 }),
-          size({
-            padding: 8,
-            apply({ availableHeight, rects }) {
-              contentEl.style.setProperty(
-                "--menu-available-height",
-                `${Math.floor(availableHeight)}px`,
-              );
-              contentEl.style.minWidth = `${Math.round(rects.reference.width)}px`;
-            },
-          }),
-        ],
-      }).then(({ x, y }) => {
-        contentEl.style.left = `${Math.round(x)}px`;
-        contentEl.style.top = `${Math.round(y)}px`;
-        contentEl.style.visibility = "visible";
-        if (!placed) {
-          placed = true;
-          onPlaced?.();
-        }
-      });
-    };
-    update();
-    return autoUpdate(anchorEl, contentEl, update);
+    untrack(() => {
+      contentEl.style.visibility = "hidden";
+      let placed = false;
+      const update = () => {
+        void computePosition(anchorEl, contentEl, {
+          placement: placement(),
+          middleware: [
+            offset(gutter),
+            flip({ padding: 8 }),
+            shift({ padding: 8 }),
+            size({
+              padding: 8,
+              apply({ availableHeight, rects }) {
+                contentEl.style.setProperty(
+                  "--menu-available-height",
+                  `${Math.floor(availableHeight)}px`,
+                );
+                contentEl.style.minWidth = `${Math.round(rects.reference.width)}px`;
+              },
+            }),
+          ],
+        }).then(({ x, y }) => {
+          contentEl.style.left = `${Math.round(x)}px`;
+          contentEl.style.top = `${Math.round(y)}px`;
+          contentEl.style.visibility = "visible";
+          if (!placed) {
+            placed = true;
+            onPlaced?.();
+          }
+        });
+      };
+      update();
+      onCleanup(autoUpdate(anchorEl, contentEl, update));
+    });
   });
 };

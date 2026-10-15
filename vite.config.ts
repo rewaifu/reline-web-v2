@@ -1,7 +1,23 @@
-import { defineConfig } from "vitest/config";
-import solid from "@solidjs/vite-plugin";
+import reze from "@rezejs/vite-plugin";
+import { readFile } from "node:fs/promises";
+import { marked } from "marked";
+import { defineConfig, type Plugin } from "vitest/config";
 
 import { fileURLToPath } from "node:url";
+
+/** `import html from "./guide.md?html"`: the Markdown compiled at build time, so
+ * the parser is not shipped for files that never change at run time. */
+const markdownHtml = (): Plugin => ({
+  name: "reline:markdown-html",
+  enforce: "pre",
+  async load(id) {
+    if (!id.endsWith(".md?html")) return null;
+    const path = id.slice(0, -"?html".length);
+    this.addWatchFile(path);
+    const html = marked.parse(await readFile(path, "utf8"), { async: false });
+    return `export default ${JSON.stringify(html)};`;
+  },
+});
 
 export default defineConfig(({ command }) => ({
   // CDN serves the app from a nested path, so the built page must reference
@@ -20,21 +36,37 @@ export default defineConfig(({ command }) => ({
       },
     ],
   },
-  // generates the entries around src/App.tsx, wrapped in src/Document.tsx.
-  // `vite build` prerenders the shell into dist/client/index.html and emits a
-  // purely static dist/client.
   plugins: [
-    solid({ start: true, extensions: [".jsx", ".tsx"], diagnostics: true }),
+    markdownHtml(),
+    reze({
+      // the library ships no current manifest: analyse its source instead
+      analyze: ["@rebase-ui/reze"],
+      diagnostics: { jsonl: "node_modules/.cache/reze-diagnostics.jsonl" },
+    }),
   ],
+  optimizeDeps: {
+    // Reze library sources hold compiler syntax: the Reze plugin compiles them,
+    // pre-bundling would feed them to the bundler raw
+    exclude: ["@rebase-ui/reze"],
+    // the dependency scan parses JSX itself, before the Reze plugin runs
+    rolldownOptions: {
+      transform: { jsx: { runtime: "automatic", importSource: "reze-js" } },
+    },
+  },
   server: {
     port: 3000,
   },
+  define:
+    process.env.VITEST === undefined
+      ? {}
+      : { __REZE_HTML__: "false", __REZE_HYDRATE__: "false" },
   test: {
     environment: "jsdom",
     globals: false,
-    setupFiles: ["./vitest-setup.ts"],
   },
   build: {
+    // the deployments (CDN, Tauri, `plugin:bundle`) take the site from here
+    outDir: "dist/client",
     target: "esnext",
     // Keep images as asset files instead of inlining them into the JS bundle.
     assetsInlineLimit: 0,

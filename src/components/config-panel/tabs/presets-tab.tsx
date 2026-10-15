@@ -1,6 +1,7 @@
-import { type Component, createSignal, For, Show, useContext } from "solid-js";
+import { For, Show, selector, signal, useContext } from "reze-js";
 import { NodesContext, NodesDispatchContext } from "~/context/contexts";
 import { NodesActionType } from "~/types/actions";
+import type { Component } from "~/types/component";
 import {
   allPresets,
   saveUserPreset,
@@ -15,13 +16,14 @@ import styles from "../config-panel.module.scss";
 export const PresetsTab: Component = () => {
   const nodes = useContext(NodesContext);
   const dispatch = useContext(NodesDispatchContext);
-  const [presetId, setPresetId] = createSignal<string>();
-  const [name, setName] = createSignal("");
+  let presetId = signal<string>();
+  let name = signal("");
+  const isActive = selector(() => presetId);
 
   const applyPreset = (id: string) => {
     const preset = allPresets().find((p) => p.id === id);
     if (!preset) return;
-    setPresetId(id);
+    presetId = id;
     dispatch({
       type: NodesActionType.IMPORT,
       payload: preset.nodes.map((n) => ({ ...n })),
@@ -29,11 +31,11 @@ export const PresetsTab: Component = () => {
   };
 
   const saveCurrent = () => {
-    const trimmed = name().trim();
+    const trimmed = name.trim();
     if (!trimmed) return;
     const preset = saveUserPreset(trimmed, [...nodes]);
-    setName("");
-    setPresetId(preset.id);
+    name = "";
+    presetId = preset.id;
   };
 
   return (
@@ -42,14 +44,15 @@ export const PresetsTab: Component = () => {
         <input
           class={styles.presetNameInput}
           placeholder={t("panel.presets.namePlaceholder")}
-          value={name()}
-          onInput={(e) => setName(e.currentTarget.value)}
+          aria-label={t("panel.presets.namePlaceholder")}
+          value={name}
+          onInput={(e) => (name = e.currentTarget.value)}
           onKeyDown={(e) => e.key === "Enter" && saveCurrent()}
         />
         <button
           type="button"
           class={styles.presetSaveBtn}
-          disabled={!name().trim()}
+          disabled={!name.trim()}
           onClick={saveCurrent}
         >
           {t("panel.presets.save")}
@@ -60,7 +63,7 @@ export const PresetsTab: Component = () => {
           <div
             class={{
               [styles.preset]: true,
-              [styles.active]: presetId() === preset.id,
+              [styles.active]: isActive(preset.id),
             }}
           >
             <button

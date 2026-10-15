@@ -1,4 +1,4 @@
-import { createSignal, type Accessor } from "solid-js";
+import { signal } from "reze-js";
 import { message, raw, type LocalText } from "~/lib/i18n";
 import { storage } from "~/lib/storage";
 import type { PureConfig } from "~/types/node";
@@ -86,11 +86,11 @@ export interface RunOutcome {
 }
 
 export interface RunClient {
-  readonly phase: Accessor<RunPhase>;
-  readonly progress: Accessor<RunProgress | undefined>;
-  readonly messages: Accessor<RunMessage[]>;
+  readonly phase: () => RunPhase;
+  readonly progress: () => RunProgress | undefined;
+  readonly messages: () => RunMessage[];
   /** The run we watch, if any — shown in the panel so a resume is expected. */
-  readonly runId: Accessor<string | undefined>;
+  readonly runId: () => string | undefined;
   /** Begin a run. `false` when one is already going or there is no address. */
   start(url: string, pipeline: PureConfig): boolean;
   stop(): void;
@@ -209,17 +209,17 @@ export const createRunClient = (): RunClient => {
   /** The run as the user asked for it, so a reconnect can resume it. */
   let runUrl = "";
   let runPipeline: PureConfig | undefined;
-  const [phase, setPhase] = createSignal<RunPhase>("idle");
-  const [progress, setProgress] = createSignal<RunProgress>();
-  const [messages, setMessages] = createSignal<RunMessage[]>([]);
+  let phase = signal<RunPhase>("idle");
+  let progress = signal<RunProgress | undefined>(undefined);
+  let messages = signal<RunMessage[]>([]);
   const finishListeners = new Set<(outcome: RunOutcome) => void>();
   /** The run we watch. Survives a dropped socket; cleared when the run ends. */
-  const [runId, setRunId] = createSignal<string | undefined>(
+  let runId = signal<string | undefined>(
     typeof window === "undefined" ? undefined : storedRunId(),
   );
 
   const rememberRun = (id: string | undefined) => {
-    setRunId(id);
+    runId = id;
     rememberRunId(id);
   };
 
@@ -228,8 +228,8 @@ export const createRunClient = (): RunClient => {
    * frame, a dead socket, an unconfirmed stop — has to stay readable after the
    * run goes idle, which is when the user looks. */
   const log = (kind: RunMessage["kind"], text: LocalText) => {
-    setMessages((prev) =>
-      [...prev, { at: Date.now(), kind, text }].slice(-MAX_MESSAGES),
+    messages = [...messages, { at: Date.now(), kind, text }].slice(
+      -MAX_MESSAGES,
     );
   };
 
@@ -257,7 +257,7 @@ export const createRunClient = (): RunClient => {
     attempt = 0;
     closeSocket();
     window.clearTimeout(stopWatchdog);
-    setPhase("idle");
+    phase = "idle";
     rememberRun(undefined);
     log(kind, text);
     const outcome: RunOutcome = {
@@ -285,7 +285,7 @@ export const createRunClient = (): RunClient => {
       typeof d.progress === "object" &&
       d.progress !== null
     )
-      setProgress(readProgress(d.progress as Record<string, unknown>));
+      progress = readProgress(d.progress as Record<string, unknown>);
     if (status === "done" || status === "failed" || status === "cancelled") {
       const result = (d.result ?? {}) as Record<string, unknown>;
       const line = doneMessage({
@@ -308,14 +308,14 @@ export const createRunClient = (): RunClient => {
    * Bounded: after `RECONNECT_ATTEMPTS` the run ends with one honest journal
    * line instead of a retry loop nobody can see the end of. */
   const reconnect = (reason?: LocalText) => {
-    if (runId() === undefined && runPipeline === undefined) return;
+    if (runId === undefined && runPipeline === undefined) return;
     if (reason !== undefined) log("info", reason);
     if (attempt >= RECONNECT_ATTEMPTS) {
       finish("error", message("run.reconnectFailed", { url: runUrl }));
       return;
     }
     attempt += 1;
-    setPhase(runId() !== undefined ? "recovering" : "connecting");
+    phase = runId !== undefined ? "recovering" : "connecting";
     log(
       "info",
       message("run.reconnecting", {
@@ -339,7 +339,7 @@ export const createRunClient = (): RunClient => {
       send("start", { pipeline: runPipeline });
       return;
     }
-    const id = runId();
+    const id = runId;
     send("status", id === undefined ? {} : { run_id: id });
   };
 
@@ -352,7 +352,7 @@ export const createRunClient = (): RunClient => {
         const id = readText(d.run_id);
         rememberRun(id);
         runPipeline = undefined;
-        setPhase("running");
+        phase = "running";
         log("info", "run.accepted");
         break;
       }
@@ -375,9 +375,9 @@ export const createRunClient = (): RunClient => {
           return;
         }
         applySnapshot(d);
-        const id = runId();
+        const id = runId;
         log("info", "run.recovered");
-        setPhase("running");
+        phase = "running";
         send("attach", id === undefined ? {} : { run_id: id });
         break;
       }
@@ -387,13 +387,13 @@ export const createRunClient = (): RunClient => {
         applySnapshot(d);
         runPipeline = undefined;
         log("info", "run.reattached");
-        setPhase("running");
+        phase = "running";
         break;
       }
       case "progress":
-        if (readText(d.run_id) !== undefined && runId() === undefined)
+        if (readText(d.run_id) !== undefined && runId === undefined)
           rememberRun(readText(d.run_id));
-        setProgress(readProgress(d));
+        progress = readProgress(d);
         break;
       case "done": {
         const line = doneMessage(d);
@@ -409,11 +409,11 @@ export const createRunClient = (): RunClient => {
           d.message.includes("worker busy") &&
           typeof d.run_id === "string" &&
           d.run_id.length > 0 &&
-          runId() === undefined
+          runId === undefined
         ) {
           rememberRun(d.run_id as string);
           runPipeline = undefined;
-          setPhase("recovering");
+          phase = "recovering";
           send("attach", { run_id: d.run_id });
           log("info", "run.recovered");
           return;
@@ -434,7 +434,7 @@ export const createRunClient = (): RunClient => {
    * `start`, `recover` and every retry come through here, so there is one
    * place where a connection becomes a watched run. */
   const connect = () => {
-    if (runPipeline === undefined && runId() === undefined) return;
+    if (runPipeline === undefined && runId === undefined) return;
     const mine = ++ticket;
     closeSocket();
     // The config is all a fresh `start` sends: where the runner reads and
@@ -445,8 +445,8 @@ export const createRunClient = (): RunClient => {
     // (typo, wrong port, runner down) used to leave the panel looking idle
     // until the socket opened, so a second click would start a second run and
     // the buttons lied about what was happening.
-    if (phase() === "idle")
-      setPhase(watchMode === "start" ? "connecting" : "recovering");
+    if (phase === "idle")
+      phase = watchMode === "start" ? "connecting" : "recovering";
 
     // every callback checks its own ticket: a socket (or a retry) we have moved
     // on from must go quiet
@@ -458,8 +458,8 @@ export const createRunClient = (): RunClient => {
           if (!current()) return;
           if (attempt > 0) log("info", "run.reconnected");
           attempt = 0;
-          if (watchMode === "recover") setPhase("recovering");
-          else setPhase("running");
+          if (watchMode === "recover") phase = "recovering";
+          else phase = "running";
           hello();
         },
         closed: (reason) => {
@@ -496,11 +496,11 @@ export const createRunClient = (): RunClient => {
   };
 
   const start = (url: string, pipeline: PureConfig): boolean => {
-    if (phase() !== "idle" || !url) return false;
+    if (phase !== "idle" || !url) return false;
     window.clearTimeout(retryTimer);
-    setProgress(undefined);
+    progress = undefined;
     // a new run gets a fresh journal; the previous run's lines are its own
-    setMessages([]);
+    messages = [];
     // kept while the socket is down: the retry resumes this exact run
     runUrl = url;
     runPipeline = pipeline;
@@ -514,14 +514,14 @@ export const createRunClient = (): RunClient => {
    * starting anything: a tab that was asleep, a reload, a copied `run_id`.
    * Needs only the address — the socket says hello with `status`. */
   const recover = (url?: string, id?: string) => {
-    if (phase() !== "idle") return;
+    if (phase !== "idle") return;
     const address = (url ?? endpoint()).trim();
     if (!address) return;
     runUrl = address;
     runPipeline = undefined;
     if (id !== undefined) rememberRun(id);
-    else if (runId() === undefined) rememberRun(storedRunId());
-    setProgress(undefined);
+    else if (runId === undefined) rememberRun(storedRunId());
+    progress = undefined;
     attempt = 0;
     connect();
   };
@@ -530,32 +530,30 @@ export const createRunClient = (): RunClient => {
   // forever — start disabled, stop disabled, escape only by reload.
   // A watchdog forces the run back to idle when the stop goes unconfirmed.
   const stop = () => {
-    if (
-      phase() !== "running" &&
-      phase() !== "connecting" &&
-      phase() !== "recovering"
-    )
+    if (phase !== "running" && phase !== "connecting" && phase !== "recovering")
       return;
-    if (phase() === "connecting" || phase() === "recovering") {
+    if (phase === "connecting" || phase === "recovering") {
       finish("ok", "run.cancelledEarly", true);
       return;
     }
-    setPhase("stopping");
-    const id = runId();
+    phase = "stopping";
+    const id = runId;
     send("stop", id === undefined ? {} : { run_id: id });
     window.clearTimeout(stopWatchdog);
     stopWatchdog = window.setTimeout(() => {
-      if (phase() === "stopping") finish("error", "run.noStopAck");
+      if (phase === "stopping") finish("error", "run.noStopAck");
     }, STOP_WATCHDOG_MS);
   };
 
-  const clearMessages = () => setMessages([]);
+  const clearMessages = () => {
+    messages = [];
+  };
 
   return {
-    phase,
-    progress,
-    messages,
-    runId,
+    phase: () => phase,
+    progress: () => progress,
+    messages: () => messages,
+    runId: () => runId,
     start,
     stop,
     recover,

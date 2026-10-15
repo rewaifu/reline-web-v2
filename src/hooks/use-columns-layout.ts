@@ -1,4 +1,4 @@
-import { createEffect, createSignal } from "solid-js";
+import { effect, onCleanup, signal } from "reze-js";
 import { storage } from "~/lib/storage";
 import {
   LAYOUT_STORAGE_KEY,
@@ -80,44 +80,40 @@ interface ActiveResize {
  * leaves the pointer over iframes/other nodes.
  */
 export const createColumnsLayout = () => {
-  const [layout, setLayout] = createSignal<LayoutState>(loadLayout());
-  const [resizing, setResizing] = createSignal(false);
+  let layout = signal<LayoutState>(loadLayout());
+  let resizing = signal(false);
 
   // Layout changes stream in per pointermove frame during a column drag —
   // a synchronous localStorage write per frame would stutter the gesture.
   let saveTimer: number | undefined;
-  createEffect(
-    () => JSON.stringify(layout()),
-    (json) => {
-      clearTimeout(saveTimer);
-      saveTimer = window.setTimeout(() => {
-        // storage full or unavailable — layout just won't persist
-        storage.set(LAYOUT_STORAGE_KEY, json);
-      }, 300);
-      return () => clearTimeout(saveTimer);
-    },
-  );
+  effect(() => {
+    const json = JSON.stringify(layout);
+    saveTimer = window.setTimeout(() => {
+      // storage full or unavailable — layout just won't persist
+      storage.set(LAYOUT_STORAGE_KEY, json);
+    }, 300);
+    onCleanup(() => clearTimeout(saveTimer));
+  });
 
   let active: ActiveResize | null = null;
 
   const minWidthOf = (side: ResizableSide) =>
     side === "right" ? MIN_RIGHT_WIDTH : MIN_SIDE_WIDTH;
 
-  const setWidth = (side: ResizableSide, width: number) =>
-    setLayout((state) => {
-      const next = clamp(Math.round(width), minWidthOf(side), MAX_SIDE_WIDTH);
-      return side === "left"
-        ? { ...state, left: next }
-        : { ...state, right: next };
-    });
+  const setWidth = (side: ResizableSide, width: number) => {
+    const next = clamp(Math.round(width), minWidthOf(side), MAX_SIDE_WIDTH);
+    layout =
+      side === "left" ? { ...layout, left: next } : { ...layout, right: next };
+  };
 
   /** Show or hide a side panel. The stack stays: it holds the toolbar that
    * brings the others back. */
-  const toggleHidden = (key: ResizableSide) =>
-    setLayout((state) => ({
-      ...state,
-      hidden: { ...state.hidden, [key]: !state.hidden[key] },
-    }));
+  const toggleHidden = (key: ResizableSide) => {
+    layout = {
+      ...layout,
+      hidden: { ...layout.hidden, [key]: !layout.hidden[key] },
+    };
+  };
 
   const startResize = (side: ResizableSide, event: PointerEvent) => {
     const handle = event.currentTarget;
@@ -127,7 +123,7 @@ export const createColumnsLayout = () => {
 
     const rect = row.getBoundingClientRect();
     // one-time snapshot: the drag bounds are computed once, on grab
-    const staticLayout = layout();
+    const staticLayout = layout;
     const visibleCount = COLUMN_KEYS.filter(
       (column) => !staticLayout.hidden[column],
     ).length;
@@ -149,7 +145,7 @@ export const createColumnsLayout = () => {
       rect,
       max: Math.max(minWidthOf(side), rect.width - reserved),
     };
-    setResizing(true);
+    resizing = true;
     handle.setPointerCapture(event.pointerId);
   };
 
@@ -164,21 +160,20 @@ export const createColumnsLayout = () => {
   const endResize = () => {
     if (!active) return;
     active = null;
-    setResizing(false);
+    resizing = false;
   };
 
   const nudge = (side: ResizableSide, direction: -1 | 1) =>
-    setWidth(side, layout()[side] + direction * KEY_STEP);
+    setWidth(side, layout[side] + direction * KEY_STEP);
 
   const resetWidth = (side: ResizableSide) =>
     setWidth(side, DEFAULT_LAYOUT[side]);
 
-  const visibleColumns = () =>
-    COLUMN_KEYS.filter((key) => !layout().hidden[key]);
+  const visibleColumns = () => COLUMN_KEYS.filter((key) => !layout.hidden[key]);
 
   return {
-    layout,
-    resizing,
+    layout: () => layout,
+    resizing: () => resizing,
     visibleColumns,
     toggleHidden,
     startResize,

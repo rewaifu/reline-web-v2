@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { signal, untrack } from "reze-js";
 import * as v from "valibot";
 import { OptionsBagSchema } from "~/types/node";
 import type { PureConfig, PureNode, StackNode } from "~/types/node";
@@ -11,7 +11,7 @@ import type { Diagnostic } from "./types";
  * at each one. A hook is plain code from outside the app (a plugin), so the
  * runner treats it as untrusted: a throw, a wrong-shaped result or a hang is
  * caught, recorded and skipped — it must never reach the caller, which is often
- * a memo, where an exception halts Solid's whole reactive system.
+ * a memo or an effect, where an exception would take that binding down with it.
  *
  * Every transform stage is "value in, value out": returning nothing leaves the
  * value as it was (mutating in place is fine), returning a value of the right
@@ -155,11 +155,11 @@ const ACCEPTS: Record<Stage, v.GenericSchema> = {
 const entries = new Map<Stage, Entry[]>();
 let anonymous = 0;
 
-// `ownedWrite`: hooks are registered from inside a plugin's reactive root, and
-// a failure is recorded from inside whichever memo called the stage.
-const [failures, setFailures] = createSignal<readonly HookFailure[]>([], {
-  ownedWrite: true,
-});
+// Hooks are registered from inside a plugin's effect, and a failure is recorded
+// from inside whichever memo called the stage. Both write this journal, which is
+// shared state, not that memo's; reads inside the write are untracked so a memo
+// that recorded a failure does not come to depend on the journal.
+let failures = signal<readonly HookFailure[]>([]);
 
 const record = (entry: Entry, error: unknown): void => {
   entry.strikes += 1;
@@ -171,7 +171,7 @@ const record = (entry: Entry, error: unknown): void => {
     message: error instanceof Error ? error.message : String(error),
     disabled: entry.disabled,
   };
-  setFailures((all) => [...all, failure].slice(-MAX_FAILURES_KEPT));
+  failures = [...untrack(() => failures), failure].slice(-MAX_FAILURES_KEPT);
 };
 
 /** Registration order, bent by `before` / `after`. A constraint naming a hook
@@ -346,23 +346,21 @@ export const pipeline = {
   /** Record a failure of plugin code that is not a stage hook (an action
    * reducer): same journal, no strikes — the caller decides what to do. */
   report(source: HookFailure["stage"], id: string, error: unknown): void {
-    setFailures((all) =>
-      [
-        ...all,
-        {
-          stage: source,
-          id,
-          at: Date.now(),
-          message: error instanceof Error ? error.message : String(error),
-          disabled: false,
-        },
-      ].slice(-MAX_FAILURES_KEPT),
-    );
+    failures = [
+      ...untrack(() => failures),
+      {
+        stage: source,
+        id,
+        at: Date.now(),
+        message: error instanceof Error ? error.message : String(error),
+        disabled: false,
+      },
+    ].slice(-MAX_FAILURES_KEPT);
   },
 
   /** Hooks that threw, returned nonsense or hung — newest last. Reactive. */
   failures(): readonly HookFailure[] {
-    return failures();
+    return failures;
   },
 
   /** Every registered hook with its strike count, for a diagnostics screen. */

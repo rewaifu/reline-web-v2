@@ -1,4 +1,4 @@
-import { flush } from "solid-js";
+import { tick } from "@rezejs/testing-library";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setLocale, type Locale } from "~/lib/i18n";
 import type { RunProgress } from "~/lib/run-client";
@@ -22,11 +22,10 @@ const frame = (fields: Partial<RunProgress>): RunProgress => ({
 
 const MEGABYTE = 1024 * 1024;
 
-/** Solid 2 defers a signal write to the next flush: switching the language and
- * formatting in the same tick without flushing would use the old one. */
+/** Switching the language and formatting in the same tick: settle the locale first. */
 const use = (next: Locale) => {
   setLocale(next);
-  flush();
+  tick();
 };
 
 // jsdom reports an English browser, so the Russian expectations below state

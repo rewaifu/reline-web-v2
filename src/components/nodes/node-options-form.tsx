@@ -1,5 +1,6 @@
-import { type Accessor, type Component, Errored, Show } from "solid-js";
-import { Dynamic } from "@solidjs/web";
+import { Show, dynamic } from "reze-js";
+import type { Component } from "~/types/component";
+import { Errored } from "~/components/errored/errored";
 import type { StackNode } from "~/types/node";
 import { nodeRegistry } from "~/lib/nodes";
 import { pipeline } from "~/lib/pipeline/hooks";
@@ -16,10 +17,11 @@ export interface NodeFormProps {
  * orphan node (its type is not defined — a plugin that is off) and a type
  * without a form get a note instead; the options stay in the tree untouched. */
 export const NodeOptionsForm: Component<NodeFormProps> = (props) => {
-  const form = () => nodeRegistry.get(props.node.type)?.Form;
+  // the dynamic component follows the node's type; a falsy source renders nothing
+  const Body = dynamic(() => nodeRegistry.get(props.node.type)?.Form);
   return (
     <Show
-      when={form()}
+      when={nodeRegistry.get(props.node.type)?.Form}
       fallback={
         <p class={styles.orphan}>
           {t(
@@ -31,18 +33,16 @@ export const NodeOptionsForm: Component<NodeFormProps> = (props) => {
         </p>
       }
     >
-      {(Form) => (
-        // a node type's form may come from a plugin: a render error costs this
-        // card its body, not the stack
-        <Errored
-          fallback={(error: Accessor<unknown>) => {
-            pipeline.report("ui", `form:${props.node.type}`, error());
-            return <p class={styles.orphan}>{t("form.broken")}</p>;
-          }}
-        >
-          <Dynamic component={Form()} node={props.node} />
-        </Errored>
-      )}
+      {/* a node type's form may come from a plugin: a render error costs this
+          card its body, not the stack */}
+      <Errored
+        fallback={(error: () => unknown) => {
+          pipeline.report("ui", `form:${props.node.type}`, error());
+          return <p class={styles.orphan}>{t("form.broken")}</p>;
+        }}
+      >
+        <Body node={props.node} />
+      </Errored>
     </Show>
   );
 };

@@ -52,8 +52,7 @@
 **Если что-то сломалось.**
 
 - `?plugins=off` в адресе — безопасный режим: ни один плагин не загружается.
-- Если страница зависла (Solid останавливает всю реактивность при любой необработанной ошибке в
-  эффекте), оверлей предложит «Выключить плагины и перезагрузить».
+- Если страница зависла, оверлей предложит «Выключить плагины и перезагрузить».
 - Если прошлый запуск не дошёл до «страница жива» (вкладку убило, страница замёрзла), плагины,
   которые стартовали тогда, выключаются при следующем открытии, и вкладка «Плагины» говорит об
   этом.
@@ -84,7 +83,7 @@ export default definePlugin<"nodes" | "i18n">({
 
 ```ts
 // vite.config.ts
-import solid from "@solidjs/vite-plugin";
+import reze from "@rezejs/vite-plugin";
 import { defineConfig } from "vite";
 import { relinePlugin } from "@reline/plugin-sdk/vite"; // sdk/vite.ts в этом репозитории
 
@@ -98,7 +97,7 @@ export default defineConfig({
         caps: ["nodes", "i18n"],
       },
     }),
-    solid(),
+    reze(),
   ],
   build: { outDir: "dist", lib: { entry: "src/index.tsx", formats: ["es"] } },
 });
@@ -108,7 +107,7 @@ export default defineConfig({
 ссылка на `plugin.json` и есть «ссылка для установки».
 
 Без сборки тоже можно: обычный ES-модуль без импортов, `export default { activate(api) {…} }`,
-плюс `plugin.json` с хешем (`scripts/pin-plugin.mjs`). Solid берите из `api.solid` / `api.web`.
+плюс `plugin.json` с хешем (`scripts/pin-plugin.mjs`). Без сборки Reze недоступен: используйте только `api`.
 
 ## Локальная разработка
 
@@ -134,7 +133,7 @@ export default defineConfig({
   "id": "acme.border", // a.b[.c…], строчные, [a-z0-9-]; префикс всего, чем плагин владеет
   "name": "Border",
   "version": "1.0.0",
-  "api": 1, // поколение API редактора; несовместимые плагины отклоняются
+  "api": 2, // поколение API редактора; несовместимые плагины отклоняются
   "description": "…", // одним языком; запасной вариант для всех
   "descriptions": { "ru": "…", "en": "…" }, // необязательно, любой из двух; показывается на языке читателя
   "entry": "border.js", // относительно манифеста
@@ -156,8 +155,8 @@ export default defineConfig({
 
 `activate(api)` вызывается один раз; может быть `async` (до 5 с) и вернуть функцию очистки.
 Всё зарегистрированное через `api.*` снимается при выключении плагина. Всегда есть:
-`api.id`, `api.version`, `api.solid`, `api.web` (**копии Solid редактора — используйте их**, свой
-Solid в плагине не работает с редактором), `api.log(...)`, `api.onDispose(fn)`.
+`api.id`, `api.version`, `api.log(...)`, `api.onDispose(fn)`. Reze берётся из `reze-js` в исходнике плагина;
+сборка подменяет этот импорт копией редактора (встроенная в плагин копия не используется).
 
 Имена, которыми владеет плагин, начинаются с его id: типы нод `<id>.<имя>`, действия стора
 `<id>:<имя>`, методы WS `x.<id>.<имя>`; хуки получают префикс `<id>:` автоматически.
@@ -190,8 +189,7 @@ Solid в плагине не работает с редактором), `api.log
 - `styles(css)` — глобальный CSS после стилей редактора; можно менять токены (`:root{--color-…}`).
   Свои селекторы ограничивайте своим классом.
 
-Ошибка **внутри эффекта** (не в рендере) останавливает всю реактивность Solid — граница ошибок
-её не ловит. Оборачивайте код эффектов в `try/catch`.
+Ошибку **внутри эффекта** (не в рендере) обрабатывайте на месте: оборачивайте код эффектов в `try/catch`.
 
 ### `api.pipeline`
 
@@ -228,7 +226,7 @@ Solid в плагине не работает с редактором), `api.log
 ### Уровень worker (`"sandbox": "worker"`)
 
 У плагина-воркера урезанный `api`: `id`, `version`, `log(...)` и один хук
-`api.pipeline.beforeRun(fn)`, где `fn(config)` возвращает конфиг (или промис с ним). Нет Solid, нет
+`api.pipeline.beforeRun(fn)`, где `fn(config)` возвращает конфиг (или промис с ним). Нет Reze, нет
 DOM, нет других пространств. Пишется как обычный ES-модуль — см.
 `examples/writer-suffix/writer-suffix.js`:
 
@@ -284,10 +282,10 @@ export default {
 
 ## Сборка и публикация
 
-- `relinePlugin()` (`sdk/vite.ts`) подменяет импорты `solid-js` и `@solidjs/web` на чтение из
-  `globalThis.__RELINE__` (копии редактора) и после сборки пишет `plugin.json` с SHA-384.
-  Список имён лежит в `sdk/host-exports.json`; после обновления Solid: `pnpm sdk:exports`
-  (тест `sdk/sdk.test.ts` падает, если список устарел).
+- `relinePlugin()` (`sdk/vite.ts`) подменяет импорты `reze-js` на чтение из `globalThis.__RELINE__`
+  (копии редактора: `reze-js`, `reze-js/internal/reactivity`, `reze-js/internal/runtime`)
+  и после сборки пишет `plugin.json` с SHA-384. Список имён лежит в `sdk/host-exports.json`; после обновления Reze:
+  `pnpm sdk:exports` (тест `sdk/sdk.test.ts` падает, если список устарел).
 - Собранный плагин нельзя форматировать и править руками: хеш закреплён побайтно
   (`public/plugins/**` исключён из `oxfmt` и `oxlint`).
 - В репозитории: `pnpm plugin:build` собирает Config sequence и обновляет каталог
@@ -370,8 +368,8 @@ pnpm plugin:bundle dist/client ../my-plugin/dist public/plugins/sequence
 
 Интерфейс собран из `ui.kit`, поэтому выглядит как родные вкладки.
 
-Исходник — образец для собственных плагинов: пример использует `createStore`, расщеплённый
-`createEffect(compute, apply)`, `ui.slot`, `ui.panelTab`, `ui.styles` и словарь ru/en.
+Исходник — образец для собственных плагинов: пример использует `store`, `effect` с `untrack` для побочного действия,
+`ui.slot`, `ui.panelTab`, `ui.styles` и словарь ru/en.
 
 ### Writer suffix (только пример)
 
@@ -390,9 +388,8 @@ pnpm plugin:bundle dist/client ../my-plugin/dist public/plugins/sequence
 - `id` вида `acme.border`; всё, чем владеет плагин, начинается с него (типы нод, действия `<id>:…`,
   методы WS `x.<id>.…`, ключи `localStorage` — через `api.storage`).
 - В `caps` только то, что нужно. Если хватает `pipeline` — делайте `"sandbox": "worker"`.
-- Solid — только из редактора (`relinePlugin()` подменяет импорты; без сборки — `api.solid`).
-- Каждый эффект: читаемые реактивные значения — в первой функции `createEffect(compute, apply)`;
-  внутри `apply` — без чтения реактивного (`untrack`); тело в `try/catch`.
+- Reze — только из редактора (`relinePlugin()` подменяет импорты `reze-js`).
+- Каждый эффект: одна функция. Реактивные значения читаются в её теле, побочные действия — в `untrack(...)`; тело в `try/catch`.
 - Большое хранилище не сериализуйте эффектом по всему `store` (тысячи подписок): сохраняйте по
   счётчику изменений.
 - Интерфейс — из `api.ui.kit`, цвета и отступы — токены `--color-*`, `--space-*`, `--radius-*`;

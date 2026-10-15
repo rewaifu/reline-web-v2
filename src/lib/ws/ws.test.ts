@@ -1,7 +1,7 @@
 import { decode, encode } from "notepack.io";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as v from "valibot";
-import { flush } from "solid-js";
+import { tick } from "@rezejs/testing-library";
 import { pipeline } from "~/lib/pipeline";
 import {
   createHub,
@@ -215,7 +215,7 @@ describe("connection", () => {
     socket.open();
     socket.server({ m: "x" });
     expect(seen).toHaveLength(1);
-    flush();
+    tick();
   });
 
   it("throws what a malformed address throws", () => {

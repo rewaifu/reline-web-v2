@@ -11,4 +11,12 @@ allowBuilds:
 # 2026-09-09T15:04Z; the entry can go once that age is past.
 minimumReleaseAgeExclude:
   - sugar-high@2.4.0
-  - "@rebase-ui/solid@0.2.0"
+  - "@rebase-ui/core@0.1.1"
+  - "@rebase-ui/reze@0.1.2"
+
+# @rebase-ui/reze@0.1.2 fails `vite build` with the published compiler: for
+# `const ref = mergeRefs(…); <el ref={ref}>` it emits `ref = el` and the bundler
+# rejects the reassignment of a const (ILLEGAL_REASSIGNMENT). The patch turns
+# those `const` into `let`; drop it when the library ships the fix.
+patchedDependencies:
+  "@rebase-ui/reze@0.1.2": patches/@rebase-ui__reze@0.1.2.patch

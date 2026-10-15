@@ -1,4 +1,4 @@
-import { createSignal, type Accessor } from "solid-js";
+import { signal } from "reze-js";
 import { settleRowAnimations } from "~/hooks/use-flip-reorder";
 
 export interface DragHandlers {
@@ -10,9 +10,9 @@ export interface DragHandlers {
 }
 
 export interface DragReorder {
-  dragIndex: Accessor<number | null>;
+  dragIndex: () => number | null;
   /** insertion position (0..n) — placeholder is rendered before item at this index */
-  dropIndex: Accessor<number | null>;
+  dropIndex: () => number | null;
   handlers: (index: number) => DragHandlers;
 }
 
@@ -72,8 +72,8 @@ export const createDragReorder = (
   container: () => HTMLElement | undefined,
   onMove: (from: number, to: number) => void,
 ): DragReorder => {
-  const [dragIndex, setDragIndex] = createSignal<number | null>(null);
-  const [dropIndex, setDropIndex] = createSignal<number | null>(null);
+  let dragIndex = signal<number | null>(null);
+  let dropIndex = signal<number | null>(null);
   let pressed: {
     index: number;
     el: HTMLElement;
@@ -101,8 +101,8 @@ export const createDragReorder = (
 
   const reset = () => {
     pressed = null;
-    setDragIndex(null);
-    setDropIndex(null);
+    dragIndex = null;
+    dropIndex = null;
   };
 
   // The dragged row's live position, not the render-time index: a gesture
@@ -120,7 +120,7 @@ export const createDragReorder = (
     const from = currentFrom();
     if (from === null) return;
     const next = insertionIndex(clientY);
-    setDropIndex(next === from || next === from + 1 ? null : next);
+    dropIndex = next === from || next === from + 1 ? null : next;
   };
 
   const commit = (clientY: number) => {
@@ -159,7 +159,7 @@ export const createDragReorder = (
     },
     onPointerMove: (e) => {
       if (pressed === null || pressed.id !== e.pointerId) return;
-      if (dragIndex() === null) {
+      if (dragIndex === null) {
         const travelled = Math.hypot(
           e.clientX - pressed.x,
           e.clientY - pressed.y,
@@ -168,7 +168,7 @@ export const createDragReorder = (
         // a previous drop's FLIP may still be displacing rows: settle first,
         // or the insertion slot measured below lands a slot off
         settleRowAnimations(container());
-        setDragIndex(currentFrom() ?? pressed.index);
+        dragIndex = currentFrom() ?? pressed.index;
       }
       track(e.clientY);
     },
@@ -176,7 +176,7 @@ export const createDragReorder = (
       if (pressed === null || pressed.id !== e.pointerId) return;
       // a press that never travelled is a tap: release without reordering so
       // the click below it still selects the row
-      if (dragIndex() === null) reset();
+      if (dragIndex === null) reset();
       else commit(e.clientY);
     },
     onPointerCancel: (e) => {
@@ -184,7 +184,7 @@ export const createDragReorder = (
       reset();
     },
     onKeyDown: (e) => {
-      if (dragIndex() !== null) return;
+      if (dragIndex !== null) return;
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
       e.preventDefault();
       const at = rows().indexOf(e.currentTarget as HTMLElement);
@@ -193,5 +193,9 @@ export const createDragReorder = (
     },
   });
 
-  return { dragIndex, dropIndex, handlers };
+  return {
+    dragIndex: () => dragIndex,
+    dropIndex: () => dropIndex,
+    handlers,
+  };
 };

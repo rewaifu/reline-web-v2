@@ -1,5 +1,5 @@
 import type { StackNode } from "~/types/node";
-import { type Component } from "solid-js";
+import type { Component } from "~/types/component";
 import { ReaderNodeMode } from "~/types/enums";
 import { useNodeForm, PathRow, SelectRow, CheckRow } from "./shared";
 import type { FolderReaderNodeOptions } from "~/types/options";

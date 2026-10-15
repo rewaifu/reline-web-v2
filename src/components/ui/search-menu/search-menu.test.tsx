@@ -1,5 +1,4 @@
-import { cleanup, fireEvent, render } from "@solidjs/testing-library";
-import { flush } from "solid-js";
+import { cleanup, fire, mount, tick } from "@rezejs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UiSearchMenu } from "./search-menu";
 
@@ -21,35 +20,56 @@ Element.prototype.scrollIntoView = () => {};
 afterEach(cleanup);
 
 const ITEMS = ["Folder Reader", "Upscale", "Sharp", "Folder Writer"];
-const wait = () => new Promise((resolve) => setTimeout(resolve, 30));
+const wait = () => {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, 30);
+  return promise;
+};
 
-const mount = () => {
+const setup = () => {
   const onPick = vi.fn();
-  const view = render(() => (
+  const view = mount(() => (
     <UiSearchMenu icon="plus" label="Add node" items={ITEMS} onPick={onPick} />
   ));
-  const trigger = () => view.getByRole("button", { name: "Add node" });
+  const trigger = () =>
+    view.el.querySelector<HTMLButtonElement>('button[aria-label="Add node"]')!;
   const field = () =>
     document.querySelector<HTMLInputElement>("input[role=combobox]");
   const options = () =>
     [...document.querySelectorAll("[role=option]")].map((o) => o.textContent);
   const open = async () => {
-    fireEvent.click(trigger());
-    flush();
+    fire(trigger(), "click");
+    tick();
     await wait();
   };
-  return { onPick, trigger, field, options, open };
+  const type = (value: string) => {
+    const input = field()!;
+    input.value = value;
+    fire(input, "input");
+    tick();
+  };
+  const key = (name: string) => {
+    field()!.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: name,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    tick();
+  };
+  return { onPick, trigger, field, options, open, type, key };
 };
 
 describe("UiSearchMenu", () => {
   it("is a closed icon button until clicked", () => {
-    const m = mount();
+    const m = setup();
     expect(m.field()).toBeNull();
     expect(m.trigger().getAttribute("aria-expanded")).toBe("false");
   });
 
   it("moves focus into the search field as it opens, with every item listed", async () => {
-    const m = mount();
+    const m = setup();
     await m.open();
     expect(m.trigger().getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(m.field());
@@ -57,52 +77,44 @@ describe("UiSearchMenu", () => {
   });
 
   it("filters by every typed word, in any order", async () => {
-    const m = mount();
+    const m = setup();
     await m.open();
-    fireEvent.input(m.field()!, { target: { value: "writer fol" } });
-    flush();
+    m.type("writer fol");
     expect(m.options()).toEqual(["Folder Writer"]);
-    fireEvent.input(m.field()!, { target: { value: "zzz" } });
-    flush();
+    m.type("zzz");
     expect(m.options()).toEqual([]);
     expect(document.body.textContent).toContain("Nothing found");
   });
 
   it("Enter picks the highlighted item, arrows move it, and the menu closes", async () => {
-    const m = mount();
+    const m = setup();
     await m.open();
     // one key per task, as in a browser: a write is not visible before the flush
-    fireEvent.keyDown(m.field()!, { key: "ArrowDown" });
-    flush();
-    fireEvent.keyDown(m.field()!, { key: "ArrowDown" });
-    flush();
-    fireEvent.keyDown(m.field()!, { key: "Enter" });
-    flush();
+    m.key("ArrowDown");
+    m.key("ArrowDown");
+    m.key("Enter");
     expect(m.onPick).toHaveBeenCalledWith("Sharp");
     expect(m.field()).toBeNull();
     expect(document.activeElement).toBe(m.trigger());
   });
 
   it("a click picks, and Escape closes without picking", async () => {
-    const m = mount();
+    const m = setup();
     await m.open();
-    fireEvent.click(document.querySelectorAll("[role=option]")[1]!);
-    flush();
+    fire(document.querySelectorAll("[role=option]")[1]!, "click");
+    tick();
     expect(m.onPick).toHaveBeenCalledWith("Upscale");
     await m.open();
-    fireEvent.keyDown(m.field()!, { key: "Escape" });
-    flush();
+    m.key("Escape");
     expect(m.field()).toBeNull();
     expect(m.onPick).toHaveBeenCalledTimes(1);
   });
 
   it("starts from an empty search every time it opens", async () => {
-    const m = mount();
+    const m = setup();
     await m.open();
-    fireEvent.input(m.field()!, { target: { value: "sharp" } });
-    flush();
-    fireEvent.keyDown(m.field()!, { key: "Escape" });
-    flush();
+    m.type("sharp");
+    m.key("Escape");
     await m.open();
     expect(m.field()!.value).toBe("");
     expect(m.options()).toEqual(ITEMS);

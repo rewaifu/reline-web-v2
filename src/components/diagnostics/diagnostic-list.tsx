@@ -1,4 +1,5 @@
-import { For, Show, type Component } from "solid-js";
+import { For, Show, computed } from "reze-js";
+import type { Component } from "~/types/component";
 import { render } from "~/lib/i18n";
 import type { Diagnostic } from "~/lib/pipeline";
 import styles from "./diagnostic-list.module.scss";
@@ -13,14 +14,15 @@ export interface DiagnosticListProps {
 /** The findings of the validator, errors first. Severity is carried by a
  * data attribute and by a text marker, never by colour alone. */
 export const DiagnosticList: Component<DiagnosticListProps> = (props) => {
-  const sorted = () =>
+  const sorted = computed(
     [...props.items].sort(
       (a, b) => Number(b.severity === "error") - Number(a.severity === "error"),
-    );
+    ),
+  );
   return (
     <Show when={props.items.length > 0}>
-      <ul class={[styles.list, props.class]} role="list">
-        <For each={sorted()}>
+      <ul class={[styles.list, props.class]} attr:role="list">
+        <For each={sorted}>
           {(item) => (
             <li class={styles.item} data-severity={item.severity}>
               <span class={styles.mark} aria-hidden="true">
@@ -28,7 +30,7 @@ export const DiagnosticList: Component<DiagnosticListProps> = (props) => {
               </span>
               <span class={styles.text}>
                 <Show when={item.uid !== undefined && props.nameOf?.(item.uid)}>
-                  {(name) => <strong class={styles.node}>{name()}: </strong>}
+                  {(name) => <strong class={styles.node}>{name}: </strong>}
                 </Show>
                 {render(item.message)}
               </span>

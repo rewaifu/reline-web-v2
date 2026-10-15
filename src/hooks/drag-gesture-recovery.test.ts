@@ -1,4 +1,4 @@
-import { flush } from "solid-js";
+import { tick } from "@rezejs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createDragReorder,
@@ -48,17 +48,17 @@ const fake = (
 
 const down = (h: DragHandlers, row: HTMLElement, id: number, y: number) => {
   h.onPointerDown(fake(row, row, { id, x: 10, y }));
-  flush();
+  tick();
 };
 
 const dragMove = (h: DragHandlers, row: HTMLElement, id: number, y: number) => {
   h.onPointerMove(fake(row, row, { id, x: 10, y }));
-  flush();
+  tick();
 };
 
 const up = (h: DragHandlers, row: HTMLElement, id: number, y: number) => {
   h.onPointerUp(fake(row, row, { id, x: 10, y }));
-  flush();
+  tick();
 };
 
 describe("gesture recovery after a lost pointerup", () => {

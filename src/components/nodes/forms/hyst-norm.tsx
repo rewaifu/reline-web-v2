@@ -1,5 +1,5 @@
 import type { StackNode } from "~/types/node";
-import { type Component } from "solid-js";
+import type { Component } from "~/types/component";
 import { useNodeForm, SliderRow } from "./shared";
 import type { HystNormNodeOptions } from "~/types/options";
 import { t } from "~/lib/i18n";

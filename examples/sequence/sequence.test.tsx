@@ -1,5 +1,12 @@
-import { cleanup, fireEvent, render } from "@solidjs/testing-library";
-import { createRoot, createStore, flush, type Store } from "solid-js";
+import {
+  cleanup,
+  fire,
+  mount,
+  settle,
+  tick,
+  type Mounted,
+} from "@rezejs/testing-library";
+import { root, store } from "reze-js";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -108,21 +115,20 @@ const boot = async (options: { freshStorage?: boolean } = {}) => {
     import("./src/index"),
   ]);
   setLocale("en");
-  let nodes!: Store<StackNode[]>;
+  let nodes!: StackNode[];
   const disposers: (() => void)[] = [];
-  createRoot(() => {
-    const [store, setStore] = createStore<StackNode[]>(createDefaultNodes());
+  root(() => {
     // the harness hands the store out to the test, outside any scope
-    // oxlint-disable-next-line solid/reactivity
-    nodes = store;
-    disposers.push(bindStore(store, createNodesDispatch(setStore)));
+    const nodesStore = store<StackNode[]>(createDefaultNodes());
+    nodes = nodesStore;
+    disposers.push(bindStore(nodesStore, createNodesDispatch(nodesStore)));
   });
   const api = createPluginApi({
     manifest: {
       id: "reline.sequence",
       name: "x",
       version: "1.0.0",
-      api: 1,
+      api: 2,
       entry: "x.js",
       caps: ["ui", "storage", "run", "config", "store", "i18n"],
     },
@@ -130,18 +136,18 @@ const boot = async (options: { freshStorage?: boolean } = {}) => {
     own: (d) => disposers.push(d),
     log: () => {},
   });
-  createRoot(() => {
+  root(() => {
     void plugin.default.activate(api as never);
   });
   const tab = ui.uiRegistry
     .panelTabs()
     .find((t) => t.id === "reline.sequence:sequence")!;
-  const view = render(() => <tab.Component selectedUid={() => null} />);
+  const view = mount(() => <tab.Component selectedUid={() => null} />);
   return { view, api: api as PluginApi, nodes, disposers };
 };
 
-const button = (view: ReturnType<typeof render>, name: RegExp) => {
-  const found = [...view.container.querySelectorAll("button")].find(
+const button = (view: Mounted, name: RegExp) => {
+  const found = [...view.el.querySelectorAll("button")].find(
     (b) =>
       name.test(b.textContent ?? "") ||
       name.test(b.getAttribute("aria-label") ?? ""),
@@ -149,13 +155,13 @@ const button = (view: ReturnType<typeof render>, name: RegExp) => {
   if (found === undefined) throw new Error(`no button ${name}`);
   return found as HTMLButtonElement;
 };
-const rows = (view: ReturnType<typeof render>) =>
-  view.container.querySelectorAll(".rsq-step");
-const tick = async () => {
+const rows = (view: Mounted) => view.el.querySelectorAll(".rsq-step");
+/** Lets pending promises and the run-finish callbacks land, then flushes the DOM. */
+const drain = async () => {
   await Promise.resolve();
-  flush();
-  await new Promise((r) => setTimeout(r, 0));
-  flush();
+  tick();
+  await settle();
+  tick();
 };
 
 beforeEach(() => {
@@ -170,28 +176,28 @@ afterEach(() => {
 describe("Config sequence plugin", () => {
   it("builds steps from the current stack and runs them one after another", async () => {
     const { view, api, nodes } = await boot();
-    fireEvent.click(button(view, /Add current stack/));
+    fire(button(view, /Add current stack/), "click");
     // edit the stack between steps: the second step is a different config
     api.store!.dispatch({ type: "DELETE", payload: nodes[1].uid } as never);
-    flush();
-    fireEvent.click(button(view, /Add current stack/));
-    flush();
+    tick();
+    fire(button(view, /Add current stack/), "click");
+    tick();
     expect(rows(view)).toHaveLength(2);
 
-    fireEvent.click(button(view, /Run sequence/));
-    await tick();
+    fire(button(view, /Run sequence/), "click");
+    await drain();
     // the first step only: the second waits for the first to end
     expect(fakeRun.started).toHaveLength(1);
     endRun();
-    await tick();
+    await drain();
     expect(fakeRun.started).toHaveLength(2);
     const [first, second] = fakeRun.started as PureConfig[];
     expect(first.nodes.length).toBe(second.nodes.length + 1);
     endRun();
-    await tick();
+    await drain();
     const statuses = [...rows(view)].map((r) => r.getAttribute("data-status"));
     expect(statuses).toEqual(["ok", "ok"]);
-    expect(view.container.textContent).toContain(
+    expect(view.el.textContent).toContain(
       "Sequence finished: 2 of 2 steps done",
     );
   });
@@ -199,12 +205,12 @@ describe("Config sequence plugin", () => {
   it("stops at the first failure by default, and carries on when asked to", async () => {
     let w = await boot();
     for (let i = 0; i < 3; i++)
-      fireEvent.click(button(w.view, /Add current stack/));
-    flush();
-    fireEvent.click(button(w.view, /Run sequence/));
-    await tick();
+      fire(button(w.view, /Add current stack/), "click");
+    tick();
+    fire(button(w.view, /Run sequence/), "click");
+    await drain();
     endRun({ ok: false });
-    await tick();
+    await drain();
     expect(fakeRun.started).toHaveLength(1);
     expect([...rows(w.view)].map((r) => r.getAttribute("data-status"))).toEqual(
       ["failed", "pending", "pending"],
@@ -213,19 +219,19 @@ describe("Config sequence plugin", () => {
     cleanup();
     w = await boot({ freshStorage: true });
     for (let i = 0; i < 3; i++)
-      fireEvent.click(button(w.view, /Add current stack/));
-    flush();
+      fire(button(w.view, /Add current stack/), "click");
+    tick();
     // the last switch on the tab is "stop at the first failure"
-    fireEvent.click(w.view.container.querySelectorAll("[role=switch]")[3]!);
-    flush();
-    fireEvent.click(button(w.view, /Run sequence/));
-    await tick();
+    fire(w.view.el.querySelectorAll("[role=switch]")[3]!, "click");
+    tick();
+    fire(button(w.view, /Run sequence/), "click");
+    await drain();
     endRun({ ok: false });
-    await tick();
+    await drain();
     endRun();
-    await tick();
+    await drain();
     endRun();
-    await tick();
+    await drain();
     expect(fakeRun.started).toHaveLength(3);
     expect([...rows(w.view)].map((r) => r.getAttribute("data-status"))).toEqual(
       ["failed", "ok", "ok"],
@@ -234,31 +240,27 @@ describe("Config sequence plugin", () => {
 
   it("only enabled steps run, in list order, and reordering changes the order", async () => {
     const { view, nodes, api } = await boot();
-    fireEvent.click(button(view, /Add current stack/));
+    fire(button(view, /Add current stack/), "click");
     api.store!.dispatch({ type: "DELETE", payload: nodes[0].uid } as never);
-    flush();
-    fireEvent.click(button(view, /Add current stack/));
+    tick();
+    fire(button(view, /Add current stack/), "click");
     api.store!.dispatch({ type: "DELETE", payload: nodes[0].uid } as never);
-    flush();
-    fireEvent.click(button(view, /Add current stack/));
-    flush();
+    tick();
+    fire(button(view, /Add current stack/), "click");
+    tick();
     const sizes = () => rows(view).length;
     expect(sizes()).toBe(3);
     // switch the middle step off, then move the last one to the top
-    fireEvent.click(rows(view)[1].querySelector("[role=switch]")!);
-    flush();
-    fireEvent.click(
-      rows(view)[2].querySelector("button[aria-label='Move up']")!,
-    );
-    flush();
-    fireEvent.click(
-      rows(view)[1].querySelector("button[aria-label='Move up']")!,
-    );
-    flush();
-    fireEvent.click(button(view, /Run sequence/));
-    await tick();
+    fire(rows(view)[1].querySelector("[role=switch]")!, "click");
+    tick();
+    fire(rows(view)[2].querySelector("button[aria-label='Move up']")!, "click");
+    tick();
+    fire(rows(view)[1].querySelector("button[aria-label='Move up']")!, "click");
+    tick();
+    fire(button(view, /Run sequence/), "click");
+    await drain();
     endRun();
-    await tick();
+    await drain();
     const lengths = (fakeRun.started as PureConfig[]).map(
       (c) => c.nodes.length,
     );
@@ -266,20 +268,20 @@ describe("Config sequence plugin", () => {
     // last (5) is first, then the first (7); the switched-off 6 never ran
     expect(lengths).toEqual([5, 7]);
     endRun();
-    await tick();
+    await drain();
   });
 
   it("Stop ends the sequence: the running step is stopped and nothing after it starts", async () => {
     const { view } = await boot();
     for (let i = 0; i < 2; i++)
-      fireEvent.click(button(view, /Add current stack/));
-    flush();
-    fireEvent.click(button(view, /Run sequence/));
-    await tick();
-    fireEvent.click(button(view, /Stop/));
+      fire(button(view, /Add current stack/), "click");
+    tick();
+    fire(button(view, /Run sequence/), "click");
+    await drain();
+    fire(button(view, /Stop/), "click");
     expect(fakeRun.stops).toBe(1);
     endRun({ ok: false, cancelled: true });
-    await tick();
+    await drain();
     expect(fakeRun.started).toHaveLength(1);
     expect([...rows(view)].map((r) => r.getAttribute("data-status"))).toEqual([
       "cancelled",
@@ -289,9 +291,9 @@ describe("Config sequence plugin", () => {
 
   it("a step that is no longer valid is not sent to the runner", async () => {
     const first = await boot();
-    fireEvent.click(button(first.view, /Add current stack/));
-    flush();
-    await tick();
+    fire(button(first.view, /Add current stack/), "click");
+    tick();
+    await drain();
     // damage the stored step the way a hand edit or an older build could: an
     // option the node's schema rejects
     const key = "reline-web:plugin:reline.sequence:state";
@@ -300,8 +302,8 @@ describe("Config sequence plugin", () => {
     mem.setItem(key, JSON.stringify(saved));
     cleanup();
     const second = await boot();
-    fireEvent.click(button(second.view, /Run sequence/));
-    await tick();
+    fire(button(second.view, /Run sequence/), "click");
+    await drain();
     expect(fakeRun.started).toHaveLength(0);
     expect(rows(second.view)[0].getAttribute("data-status")).toBe("failed");
     expect(rows(second.view)[0].textContent).toContain("invalid");
@@ -309,9 +311,9 @@ describe("Config sequence plugin", () => {
 
   it("keeps its steps across a reload", async () => {
     const first = await boot();
-    fireEvent.click(button(first.view, /Add current stack/));
-    flush();
-    await tick();
+    fire(button(first.view, /Add current stack/), "click");
+    tick();
+    await drain();
     cleanup();
     const second = await boot();
     expect(rows(second.view)).toHaveLength(1);
@@ -341,25 +343,23 @@ describe("Config sequence plugin", () => {
       "night-pass.json",
     );
     const bad = file("not json", "broken.json");
-    const input = view.container.querySelector(
-      "input[type=file]",
-    ) as HTMLInputElement;
+    const input = view.el.querySelector("input[type=file]") as HTMLInputElement;
     Object.defineProperty(input, "files", { value: [good, bad] });
-    fireEvent.input(input);
+    fire(input, "input");
     await vi.waitFor(() => expect(rows(view)).toHaveLength(1));
     expect(
       (rows(view)[0].querySelector(".rsq-name") as HTMLInputElement).value,
     ).toBe("night-pass");
-    expect(view.container.textContent).toContain("broken.json");
+    expect(view.el.textContent).toContain("broken.json");
   });
 
   it("a run that is already going fails the step instead of queueing behind it", async () => {
     const { view } = await boot();
-    fireEvent.click(button(view, /Add current stack/));
-    flush();
+    fire(button(view, /Add current stack/), "click");
+    tick();
     fakeRun.busy = true;
-    fireEvent.click(button(view, /Run sequence/));
-    await tick();
+    fire(button(view, /Run sequence/), "click");
+    await drain();
     expect(rows(view)[0].getAttribute("data-status")).toBe("failed");
     expect(fakeRun.started).toHaveLength(0);
   });

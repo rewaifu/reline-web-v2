@@ -1,4 +1,4 @@
-import { flush } from "solid-js";
+import { tick } from "@rezejs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDragReorder, type DragHandlers } from "./use-drag-reorder";
 
@@ -41,9 +41,8 @@ const pointer = (
     currentTarget,
   }) as unknown as PointerEvent;
 
-/** Solid 2 defers signal writes until the flush, and these handlers read the
- * signal they just wrote (`dragIndex()` gates the drop tracking), so every
- * dispatched event is followed by one. */
+/** Reze writes are synchronous; `tick` lets the effects a handler triggers settle
+ * before the next assertion, as the drop tracking reads the signals it just wrote. */
 const press = (
   handlers: DragHandlers,
   row: HTMLElement,
@@ -51,7 +50,7 @@ const press = (
   init: { id: number; x: number; y: number },
 ) => {
   handlers.onPointerDown(pointer(target, row, init));
-  flush();
+  tick();
 };
 
 const move = (
@@ -60,7 +59,7 @@ const move = (
   init: { id: number; x: number; y: number },
 ) => {
   handlers.onPointerMove(pointer(row, row, init));
-  flush();
+  tick();
 };
 
 const release = (
@@ -70,7 +69,7 @@ const release = (
   init: { id: number; x: number; y: number },
 ) => {
   handlers.onPointerUp(pointer(target, row, init));
-  flush();
+  tick();
 };
 
 describe("createDragReorder", () => {
@@ -183,13 +182,13 @@ describe("createDragReorder", () => {
     handlers.onKeyDown(
       new KeyboardEvent("keydown", { key: "ArrowUp", cancelable: true }),
     );
-    flush();
+    tick();
     expect(moves).toEqual([[1, 0]]);
 
     handlers.onKeyDown(
       new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true }),
     );
-    flush();
+    tick();
     expect(moves).toEqual([
       [1, 0],
       [1, 2],
@@ -200,7 +199,7 @@ describe("createDragReorder", () => {
       .onKeyDown(
         new KeyboardEvent("keydown", { key: "ArrowUp", cancelable: true }),
       );
-    flush();
+    tick();
     expect(moves).toHaveLength(2);
     void rows;
   });

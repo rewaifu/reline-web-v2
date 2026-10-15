@@ -1,5 +1,6 @@
-import { omit, type Component } from "solid-js";
-import { Switch } from "@rebase-ui/solid/switch";
+import { splitProps } from "reze-js";
+import type { Component } from "~/types/component";
+import { Switch } from "@rebase-ui/reze/switch";
 import styles from "./switch.module.scss";
 
 export interface UiSwitchProps {
@@ -16,15 +17,14 @@ export interface UiSwitchProps {
 
 /** Toggle switch. */
 export const UiSwitch: Component<UiSwitchProps> = (props) => {
-  const rest = omit(
-    props,
+  const [, rest] = splitProps(props, [
     "checked",
     "onChange",
     "label",
     "ariaLabel",
     "id",
     "class",
-  );
+  ]);
 
   return (
     <span class={[styles.switch, props.class]}>
@@ -33,6 +33,8 @@ export const UiSwitch: Component<UiSwitchProps> = (props) => {
         checked={props.checked}
         onCheckedChange={(checked) => props.onChange(checked)}
         id={props.id}
+        // the hidden form input would otherwise render the string "undefined"
+        value=""
         aria-label={props.ariaLabel}
         {...rest}
       >

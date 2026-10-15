@@ -1,5 +1,5 @@
-import { createSignal } from "solid-js";
-import type { Component } from "solid-js";
+import { signal } from "reze-js";
+import type { Component } from "~/types/component";
 import type { LocalText } from "~/lib/i18n";
 import type { StackNode } from "~/types/node";
 import type { NodeCardProps } from "~/components/node-card/node-card";
@@ -88,9 +88,12 @@ const slots: SlotEntry[] = [];
 const tabs = new Map<string, PanelTabDef>();
 const overrides = new Map<OverridableId, OverrideEntry[]>();
 
-// `ownedWrite`: plugins register from inside their own reactive root
-const [revision, setRevision] = createSignal(0, { ownedWrite: true });
-const changed = () => setRevision((n) => n + 1);
+// Bumped by every registration so the readers above run again. Reads inside
+// a component or effect are reactive.
+let revision = signal(0);
+const changed = () => {
+  revision += 1;
+};
 
 const removeFrom = <T>(list: T[], item: T): void => {
   const at = list.indexOf(item);
@@ -121,7 +124,7 @@ export const uiRegistry = {
 
   /** The contributions of one slot, in order. */
   slotEntries(name: SlotName): readonly SlotEntry[] {
-    revision();
+    void revision;
     return slots
       .filter((entry) => entry.slot === name)
       .sort((a, b) => a.order - b.order || a.id - b.id);
@@ -139,7 +142,7 @@ export const uiRegistry = {
   },
 
   panelTabs(): PanelTabDef[] {
-    revision();
+    void revision;
     return [...tabs.values()].sort(
       (a, b) => (a.order ?? 100) - (b.order ?? 100),
     );
@@ -167,7 +170,7 @@ export const uiRegistry = {
   },
 
   overridesFor(id: OverridableId): readonly OverrideEntry[] {
-    revision();
+    void revision;
     return [...(overrides.get(id) ?? [])];
   },
 

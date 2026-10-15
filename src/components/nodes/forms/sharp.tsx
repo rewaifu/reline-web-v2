@@ -1,5 +1,6 @@
 import type { StackNode } from "~/types/node";
-import { type Component, createUniqueId } from "solid-js";
+import { createUniqueId } from "reze-js";
+import type { Component } from "~/types/component";
 import { CannyType } from "~/types/enums";
 import { useNodeForm, NumberRow, SliderRow } from "./shared";
 import { Label, UiSelect, UiSwitch } from "~/components/ui";

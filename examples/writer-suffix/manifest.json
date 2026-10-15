@@ -2,7 +2,7 @@
   "id": "reline.writer-suffix",
   "name": "Writer suffix (sandboxed demo)",
   "version": "1.0.0",
-  "api": 1,
+  "api": 2,
   "description": "Appends -sandboxed to every writer's output folder at run time. Runs in a Web Worker: it sees only the config of a run.",
   "descriptions": {
     "ru": "Добавляет -sandboxed к папке вывода каждого Writer при запуске. Работает в Web Worker: видит только конфиг запуска.",

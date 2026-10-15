@@ -1,4 +1,4 @@
-import type { Component } from "solid-js";
+import type { Component } from "~/types/component";
 import { nodeMenuEntries } from "~/lib/nodes";
 import type { NodeType } from "~/types/enums";
 import { UiSearchMenu } from "~/components/ui";

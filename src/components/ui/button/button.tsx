@@ -1,9 +1,10 @@
-import { omit, type Component } from "solid-js";
-import type { ComponentProps } from "@solidjs/web";
+import { splitProps } from "reze-js";
+import type { PropsOf } from "reze-js";
+import type { Component } from "~/types/component";
 import { Icon, type IconName } from "../icon";
 import styles from "./button.module.scss";
 
-export interface UiButtonProps extends ComponentProps<"button"> {
+export interface UiButtonProps extends PropsOf<"button"> {
   /** `primary`: the accent border of the main action on a screen (Run). */
   variant?: "default" | "primary";
 }
@@ -11,7 +12,7 @@ export interface UiButtonProps extends ComponentProps<"button"> {
 /** Text button. Always `type="button"` unless told otherwise: a button inside a
  * form that submits by accident is the more expensive mistake. */
 export const UiButton: Component<UiButtonProps> = (props) => {
-  const rest = omit(props, "class", "variant", "type");
+  const [, rest] = splitProps(props, ["class", "variant", "type"]);
   return (
     <button
       {...rest}
@@ -23,7 +24,7 @@ export const UiButton: Component<UiButtonProps> = (props) => {
 };
 
 export interface UiIconButtonProps extends Omit<
-  ComponentProps<"button">,
+  PropsOf<"button">,
   "children" | "aria-label" | "title"
 > {
   icon: IconName;
@@ -33,7 +34,7 @@ export interface UiIconButtonProps extends Omit<
 
 /** Square icon button, the size of the editor's own toolbar buttons. */
 export const UiIconButton: Component<UiIconButtonProps> = (props) => {
-  const rest = omit(props, "class", "icon", "label", "type");
+  const [, rest] = splitProps(props, ["class", "icon", "label", "type"]);
   return (
     <button
       {...rest}

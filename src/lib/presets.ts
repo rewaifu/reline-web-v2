@@ -1,5 +1,5 @@
 import type { NodeOptions, StackNode } from "~/types/node";
-import { createSignal } from "solid-js";
+import { signal } from "reze-js";
 import { NodeType, ReaderNodeMode, DType, FilterType } from "~/types/enums";
 import { createDefaultNodes, createNode } from "~/lib/nodes";
 import type { LocalText } from "~/lib/i18n";
@@ -122,23 +122,20 @@ const loadUserPresets = (): ConfigPreset[] => {
   return Array.isArray(stored) ? (stored as ConfigPreset[]) : [];
 };
 
-const [userPresets, setUserPresets] =
-  createSignal<ConfigPreset[]>(loadUserPresets());
-const [hiddenStock, setHiddenStock] = createSignal<string[]>(
-  readList(HIDDEN_STOCK_KEY),
-);
+let userPresets = signal<ConfigPreset[]>(loadUserPresets());
+let hiddenStock = signal<string[]>(readList(HIDDEN_STOCK_KEY));
 
 /** Built-ins (minus hidden) first, then user-saved presets. */
 export const allPresets = (): ConfigPreset[] => [
-  ...CONFIG_PRESETS.filter((p) => !hiddenStock().includes(p.id)),
-  ...userPresets(),
+  ...CONFIG_PRESETS.filter((p) => !hiddenStock.includes(p.id)),
+  ...userPresets,
 ];
 
-export const hiddenStockCount = (): number => hiddenStock().length;
+export const hiddenStockCount = (): number => hiddenStock.length;
 
 export const restoreStockPresets = () => {
   storage.remove(HIDDEN_STOCK_KEY);
-  setHiddenStock([]);
+  hiddenStock = [];
 };
 
 const writeUserPresets = (list: ConfigPreset[]) =>
@@ -158,7 +155,7 @@ export const saveUserPreset = (
   const list = loadUserPresets();
   list.push(preset);
   writeUserPresets(list);
-  setUserPresets(list);
+  userPresets = list;
   return preset;
 };
 
@@ -167,12 +164,12 @@ export const deletePreset = (id: string) => {
   if (id.startsWith("user-")) {
     const list = loadUserPresets().filter((p) => p.id !== id);
     writeUserPresets(list);
-    setUserPresets(list);
+    userPresets = list;
     return;
   }
-  const hidden = Array.from(new Set([...hiddenStock(), id]));
+  const hidden = Array.from(new Set([...hiddenStock, id]));
   storage.setJson(HIDDEN_STOCK_KEY, hidden);
-  setHiddenStock(hidden);
+  hiddenStock = hidden;
 };
 
 export const getPresetByName = (name: string): ConfigPreset | undefined =>

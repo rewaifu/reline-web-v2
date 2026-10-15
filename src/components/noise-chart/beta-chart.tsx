@@ -1,4 +1,5 @@
-import { createMemo, type Component } from "solid-js";
+import { computed } from "reze-js";
+import type { Component } from "~/types/component";
 import type { NoiseNodeOptions } from "~/types/options/noise";
 import styles from "./beta-chart.module.scss";
 
@@ -33,30 +34,31 @@ const W = 280;
 const H = 96;
 const PAD = 6;
 
+/** The polyline `points` for the density of Beta(a, b) in the frame. */
+const curvePoints = (a: number, b: number): string => {
+  const ys = Array.from({ length: N + 1 }, (_, i) => pdf(i / N, a, b));
+  // headroom so the peak never kisses the frame's top edge
+  const peak = Math.max(1e-9, ...ys) * 1.1;
+  return ys
+    .map(
+      (y, i) =>
+        `${(PAD + (i / N) * (W - 2 * PAD)).toFixed(1)},${(H - PAD - (y / peak) * (H - 2 * PAD)).toFixed(1)}`,
+    )
+    .join(" ");
+};
+
 /** Live Beta(a, b) density of the noise the node adds (before the alpha
  * scaling): `rng.beta(a, b) * 2 - 1`. Recomputes from the selected node's
  * current a/b — the guide's chart always matches the form. */
 export const BetaChart: Component<{ options: NoiseNodeOptions }> = (props) => {
-  const curve = createMemo(() => {
-    const a = props.options.a;
-    const b = props.options.b;
-    const ys = Array.from({ length: N + 1 }, (_, i) => pdf(i / N, a, b));
-    // headroom so the peak never kisses the frame's top edge
-    const peak = Math.max(1e-9, ...ys) * 1.1;
-    return ys
-      .map(
-        (y, i) =>
-          `${(PAD + (i / N) * (W - 2 * PAD)).toFixed(1)},${(H - PAD - (y / peak) * (H - 2 * PAD)).toFixed(1)}`,
-      )
-      .join(" ");
-  });
+  const curve = computed(curvePoints(props.options.a, props.options.b));
   const midX = PAD + 0.5 * (W - 2 * PAD);
   return (
     <figure class={styles.chart}>
       <svg
         viewBox={`0 0 ${W} ${H}`}
         class={styles.plot}
-        role="img"
+        attr:role="img"
         aria-label={`Beta(${props.options.a}, ${props.options.b})`}
       >
         <line
@@ -67,7 +69,7 @@ export const BetaChart: Component<{ options: NoiseNodeOptions }> = (props) => {
           class={styles.axis}
         />
         <line x1={midX} y1={PAD} x2={midX} y2={H - PAD} class={styles.zero} />
-        <polyline points={curve()} class={styles.curve} />
+        <polyline points={curve} class={styles.curve} />
       </svg>
       <figcaption class={styles.caption}>
         <span>−255</span>

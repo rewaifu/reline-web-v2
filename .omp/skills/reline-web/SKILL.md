@@ -1,43 +1,45 @@
 ---
 name: reline-web
 description: >
-  Project rules for reline-web (Solid 2.0-rc.6 + Kobalte fork + SCSS modules, Vite, pnpm 12).
-  Use when editing src/**, running the lint/typecheck/build gates, touching the node
-  reducer/store, WebSocket clients, persistence, or verifying UI behaviour in a browser.
-  Contains the review-derived invariants (uid identity, projection selection, deferred
-  writes) that are easy to break.
+  Project rules for reline-web (Reze: reze-js + @rezejs/vite-plugin, @rebase-ui/reze UI kit,
+  SCSS modules, Vite, pnpm 12). Use when editing src/**, running the lint/typecheck/build
+  gates, touching the node reducer/store, WebSocket clients, persistence, or verifying UI
+  behaviour in a browser. Contains the review-derived invariants (uid identity, selector-based
+  selection, in-place store updates) that are easy to break.
 ---
 
 # reline-web — project practices
 
-Solid **2.0-rc.6**. For framework patterns the `solid-js-patterns` skill is canonical;
-this file records the project-specific decisions and the traps this codebase has hit.
+Stack: **Reze** (`reze-js` 0.1, compiled by `@rezejs/vite-plugin`). For framework patterns the
+`reze-patterns` skill is canonical; this file records the project-specific decisions and the
+traps this codebase has hit. Migration history and findings: `docs/reze-migration.md`.
 
-## Gates (run all three before calling anything done)
+## Gates (run them before calling anything done)
 
-| Command          | What it is                                                                                                                                                                                                              |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm lint`      | `oxlint --type-aware --type-check` — solid rules come from `eslint-plugin-solid/configs/v2` through oxlint's JS-plugin bridge, which needs `eslint` + `oxlint-tsgolint` installed. Both are devDependencies; keep them. |
-| `pnpm typecheck` | `tsc --noEmit`                                                                                                                                                                                                          |
-| `pnpm format`    | `oxfmt` (house standard; `.oxfmtrc.json` pins printWidth 80)                                                                                                                                                            |
-| `pnpm test`      | vitest: convert round-trip + reducer invariants                                                                                                                                                                         |
-| `pnpm build`     | `vite build` then `rimraf dist/client/.vite` (the solid plugin emits a manifest dir despite `manifest: false`)                                                                                                          |
+| Command          | What it is                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `pnpm lint`      | `oxlint --type-aware --type-check` (type-aware: it type-checks test files too, so a failing `tsc` also fails lint) |
+| `pnpm typecheck` | `tsc --noEmit`                                                                                                     |
+| `pnpm format`    | `oxfmt` (house standard; `.oxfmtrc.json` pins printWidth 80)                                                       |
+| `pnpm test`      | vitest: convert round-trip + reducer invariants                                                                    |
+| `pnpm build`     | plain `vite build`; output `dist/client`                                                                           |
 
-`lint` is type-aware: it type-checks test files too, so a failing `tsc` also fails lint.
+Compiler diagnostics are not a gate command: the Reze plugin writes them to
+`node_modules/.cache/reze-diagnostics.jsonl` during dev and build (see **Diagnostics workflow**).
 
-Package manager: **pnpm 12**, pinned via `packageManager` (pnpm self-manages that version) —
-install with `pnpm install`, never bun/npm; `bun.lock` and `package-lock.json` must never
-reappear. pnpm 12 keeps its settings in `pnpm-workspace.yaml` (non-auth `.npmrc` keys are
-ignored) and all three entries there are load-bearing:
-`blockExoticSubdeps: false` (the Kobalte fork's `@kobalte/core` points `@kobalte/utils` at its
-own git repo — pnpm rejects git specs in subdependencies and an `overrides` entry does _not_
-lift the check), `allowBuilds` for `@parcel/watcher` (prebuilt Linux binary is enough) and a
-`minimumReleaseAgeExclude` for `sugar-high@2.4.0` (younger than the default 24h window).
-`pnpm install` fails loudly if any of them is dropped.
+Package manager: **pnpm 12.3.4**, pinned via `packageManager` in `package.json` (pnpm self-manages that version) —
+install with `pnpm install`, never bun/npm; `bun.lock` and `package-lock.json` must never reappear. pnpm 12 keeps
+its settings in `pnpm-workspace.yaml` (non-auth `.npmrc` keys are ignored).
+What is load-bearing in `pnpm-workspace.yaml` now: `allowBuilds` for `@parcel/watcher` (`false`); a
+`minimumReleaseAgeExclude` for `sugar-high@2.4.0`, `@rebase-ui/core@0.1.1` and `@rebase-ui/reze@0.1.2`;
+and `patchedDependencies` for `@rebase-ui/reze@0.1.2` (`patches/@rebase-ui__reze@0.1.2.patch`: `const ref`
+→ `let ref`, because the production compiler emits `ref = el` and the build fails with
+`ILLEGAL_REASSIGNMENT` without it). Dropping the patch brings that build failure back; upgrading
+`@rebase-ui/reze` means re-checking the patch.
 
 ## Identity: `uid` is the only node identity
 
-`StackNode` has **no `id`**. Position comes from `<For>`'s `index()` accessor; everything
+`StackNode` has **no `id`**. Position comes from `<For>`'s `index` (a signal read by name in identity mode); everything
 that addresses a node (CHANGE/DELETE payloads, `selectedUid`, `data-node-id`,
 preprocessor `meta.parents`) uses `uid` (`src/lib/uid.ts`).
 
@@ -53,13 +55,12 @@ Rules that keep keyed rendering cheap (measured before/after in the 2026-09-10 r
 - Options merge **in place** through the store proxy (`Object.assign(state[i].options, patch)`)
   — swapping the item reference remounts the card and drops input focus.
 
-## Selection: projection, not per-row comparison
+## Selection: `selector`, not per-row comparison
 
-`Workspace` (src/routes/workspace/workspace.tsx) owns `selectedUid` and a
-`createProjection<Record<string, boolean>>` keyed by uid. Rows read
-`props.isSelected[node.uid]` — one click recomputes only the entering/leaving rows.
-Never compare `props.selectedUid() === node.uid` inside every row (that is O(n) per click —
-the diagnostics code for it is `HUGE_FAN_OUT`).
+`Workspace` (src/routes/workspace/workspace.tsx) owns `let selectedUid = signal<string | null>(null)`
+and `const isSelected = selector(() => selectedUid)`. Rows call `isSelected(node.uid)` — one click
+recomputes only the entering/leaving rows. Never compare `props.selectedUid() === node.uid` inside
+every row (that is O(n) per click).
 
 ## Node types are an open registry (`src/lib/nodes`)
 
@@ -77,10 +78,12 @@ Import the registry from `~/lib/nodes` (it registers the built-ins); `~/lib/node
   drop an unknown type — that deletes part of a pipeline whose plugin is merely off.
 - `sanitizeNode` merges defaults, runs `normalize`, then resets each field the schema rejects to its
   default (`repairOptions`). `convertToPure(nodes, onIssue)` never throws when given `onIssue`
-  (use `exportConfig`) — it is called inside a memo, where a throw halts the reactive system. A node
-  that fails is written through unchanged and reported; the run refuses to start on any issue.
-- Registry writes use `createSignal(…, { ownedWrite: true })`: plugins define types from inside their
-  own reactive root.
+  (use `exportConfig`) — it is called inside the `analyze` computed, where an exception would take the
+  analysis down with it. A node that fails is written through unchanged and reported; the run refuses
+  to start on any issue.
+- Registry state is a module-level `let revision = signal(0)` bumped by each write; readers touch
+  `revision` and then read the plain list (see **Plugins**). Plugins define types from inside their own
+  `root` (`runtime.ts`).
 - All `localStorage` access goes through `src/lib/storage.ts` (`get/set/remove/getJson/setJson`).
 
 ## Pipeline stages and diagnostics (`src/lib/pipeline`)
@@ -90,10 +93,10 @@ Import the registry from `~/lib/nodes` (it registers the built-ins); `~/lib/node
 `ws.receive`. The runner treats every hook as untrusted: throw / wrong shape / hang / a promise in a
 sync stage is caught, recorded in `pipeline.failures()` and skipped; three strikes switch the hook
 off (`reenable`). `apply`, `collect`, `applyAsync` and `frame` never throw, which is what makes them
-safe inside a memo. Hook results are checked with valibot (`ACCEPTS` in `hooks.ts`).
+safe inside a computed or effect. Hook results are checked with valibot (`ACCEPTS` in `hooks.ts`).
 
 `analyze(nodes)` (`src/lib/config.ts`) is the one pass that serialises _and_ validates; App owns the
-memo and provides it as `AnalysisContext` — Code tab, node cards (`data-diagnostics`, inset edge
+computed and provides it as `AnalysisContext` — Code tab, node cards (`data-diagnostics`, inset edge
 stripe, `DiagnosticList`) and Run tab read it, nobody re-serialises. A finding is a `Diagnostic`
 (`code`, `severity`, `message: LocalText`, `uid?`, `path?`); built-in rules live in
 `pipeline/validate.ts`, a node type adds its own through `NodeDef.validate`. **Errors refuse a run**
@@ -110,12 +113,19 @@ manifest**, after a consent card (`PluginsTab`); the registry lives in `localSto
 never re-fetched from its URL after the hash check. `?plugin=<url>` only opens the card; nothing installs on
 sight. Pieces:
 
+- **Plugin ABI**: `exposeHost()` (runtime.ts, at module load) sets `globalThis.__RELINE__ = { apiVersion,
+"reze-js", "reze-js/internal/reactivity", "reze-js/internal/runtime" }`. `relinePlugin()` (`sdk/vite.ts`)
+  compiles a plugin with the Reze compiler and rewrites imports of those three specifiers to a shim
+  that reads `globalThis.__RELINE__[specifier]` (throws "Reline host not found" when loaded outside Reline).
+  A plugin therefore shares the host's reactive graph; a second copy of `reze-js` would not see the host's
+  signals. Export names come from `sdk/host-exports.json` (`pnpm sdk:exports` regenerates it).
 - `loader.ts` (fetch + policy: https or loopback, pin required except loopback, origin allow-list
-  `reline-web:plugins:allow`, size limits), `store.ts` (persisted list; reads answer from a plain variable —
-  **a signal write is deferred in Solid 2, so `put` then `get` through the signal returned the old list**; the
-  same pattern is in `i18n/plugin-dict.ts` and the node/UI registries: Map/array + a `revision` signal),
-  `runtime.ts` (activate/deactivate/boot, per-plugin `createRoot` + disposer list, 5 s activate timeout, late
-  registrations after teardown are undone), `api.ts` (`createPluginApi`: namespaces exist only for granted
+  `reline-web:plugins:allow`, size limits), `store.ts` (persisted list; `current` is a plain variable and
+  the source of truth, `revision` is a signal that only tells subscribers to read again — the array answers
+  at once, so `put` then `get` returns the new list; the same shape is in `i18n/plugin-dict.ts`,
+  `lib/nodes/registry.ts`, `lib/ui/registry.ts`, `lib/pipeline/hooks.ts`), `runtime.ts` (activate/deactivate/boot,
+  per-plugin `root(...)` with a disposer list, 5 s activate timeout, late registrations after teardown are
+  undone), `api.ts` (`createPluginApi`: namespaces exist only for granted
   caps; names must carry the plugin id — node types `<id>.x`, actions `<id>:x`, WS `x.<id>.x`, hook ids
   `<id>:…`; `ws.*`/`store.action` stages need the `ws`/`store` cap), `worker-host.ts` (sandbox tier: Web
   Worker, `pipeline` cap only, `beforeRun` only — the one async stage).
@@ -126,7 +136,7 @@ sight. Pieces:
 - UI registry (`lib/ui/registry.ts`, typed by `SlotContext` / `OverrideProps`): `<Slot name>` and
   `overridable(id, Base)` wrap each contribution in `Errored` (an override falls back to the component under
   it); panel tabs are registered like plugin tabs (`config-panel/builtin-tabs.ts`, orders 10–50). **`ConfigPanel`'s
-  `active` must stay a memo**: `value` is read inside the Kobalte panel's children, and a plain function re-ran
+  `active` must stay a `computed`**: `value` is read inside the `UiTabs` content, and a plain function re-ran
   them — remounting the open tab and dropping its state — on every registry change.
 - Store: `createNodesDispatch` runs `store.action` hooks → reducer (builtin or `storeActions`) → observers; a
   throwing reducer/hook is recorded (`pipeline.report`), never propagated. `StackNode.ext` (per plugin id)
@@ -140,25 +150,21 @@ sight. Pieces:
 - Example plugins: `examples/sequence` (built with `relinePlugin()` → `public/plugins/sequence`, contract test
   `examples/sequence/sequence.test.tsx` runs the real source against the real API), `examples/writer-suffix`
   (worker tier, pinned by `scripts/pin-plugin.mjs` into `public/plugins/examples/` — **not in the catalog**). `public/plugins/**` is excluded from oxfmt/oxlint — the hash
-  pins bytes; CI rebuilds and `git diff --exit-code`s it. After a Solid upgrade run `pnpm sdk:exports`.
+  pins bytes; CI rebuilds and `git diff --exit-code`s it. After a reze-js upgrade run `pnpm sdk:exports`.
 - Tests that need a fresh module graph use `vi.resetModules()` + stubbed `localStorage`; jsdom cannot import Blob
-  URLs or make Workers — use `setModuleLoader` / `setWorkerFactory`. `@solidjs/testing-library` does not
-  auto-clean (no globals): call `cleanup()` in `afterEach`.
+  URLs or make Workers — use `setModuleLoader` / `setWorkerFactory`. `@rezejs/testing-library` does not
+  auto-clean: call `cleanup()` in `afterEach`.
 
-## Untrusted nodes and the reactive halt
+## Untrusted nodes and the reactive scheduler
 
-- **Solid 2 halts the ENTIRE reactive system on an uncaught error** inside a
-  computation (JSX render, `createEffect` compute, `createMemo`): the page keeps
-  painting and every input ignores the keyboard. `[REACTIVITY_HALTED]` in the
-  console is the _symptom_; the cause is the first error above it.
-- **An error boundary does not catch effect errors** — it only sees render
-  errors, so a form computing on data it did not expect still halts everything.
-  `Errored`/`createErrorBoundary` is damage control, not the fix.
-- **`Errored` must be the JSX form** (`<Errored fallback={…}><Workspace/></Errored>`).
-  Calling `createErrorBoundary(() => <Workspace/>, …)` builds the child in the
-  component body, outside the context providers, and dies on `useContext`
-  ("Context must either be created with a default value or a value must be
-  provided").
+- **An effect error does not halt the app** (F5, `docs/reze-migration.md`): the error is thrown out of the
+  current flush, the rest of that flush is dropped until the next write, and the system keeps running. The
+  symptom is a missing update, not a frozen page: the next write works again. Read the first error in the
+  console (`pageerror` / `window.onerror`) before blaming a handler.
+- **`Errored` catches render errors and later binding errors** (it is `catchError` based). Use the JSX
+  form (`<Errored fallback={…}><Workspace/></Errored>`). Open case **F7**: a `dynamic(...)` child under
+  `Errored` is not caught on its first render — keep untrusted data out of such children until P3 follow-up
+  closes it.
 - **Node data from outside the app is parsed at the door**: `sanitizeNodes` /
   `sanitizeNode` (`src/lib/node-shape.ts`, valibot) run in `App.loadNodes` and in
   the reducer's ADD/IMPORT. They drop non-nodes, fill options the type declares
@@ -168,56 +174,61 @@ sight. Pieces:
 - **Enum maps indexed by stored values need a fallback** (`CHANNELS[mode] ??
 CHANNELS[default]` in `screentone.tsx`): an unknown member returns `undefined`
   and reaches `<For>`, which throws during render.
-- **The halt watchdog** (`src/lib/ui-watchdog.ts`) detects what a boundary
-  cannot: a signal is bumped on a timer and one hidden node renders it, so a DOM
-  that stops following the beat means the scheduler is dead; then a plain-DOM
-  overlay shows the last `window.onerror` text with a reload button. Tests:
-  `ui-watchdog.test.ts`, `crash.test.tsx`, `node-shape.test.ts`.
+- **The watchdog** (`src/lib/ui-watchdog.ts`, `createWatchdog`) guards the one thing an error boundary
+  cannot: a stuck DOM. A signal `beat` is bumped on a 1 s timer and one hidden probe (`<span ref hidden>`)
+  renders it; a tick where the probe does not follow counts a strike (3 strikes = stall, stop, `onStall`
+  once); a late tick (> 2× interval) counts as neither miss nor keeps a prior miss; 3 healthy ticks call
+  `onHealthy`. Only a confirmed stall shows the plain-DOM `showHaltOverlay` (built without the reactive
+  system on purpose), with the last `error`/`unhandledrejection` text from `rememberErrors()` and a reload
+  button (plus "disable plugins and reload" when plugins are enabled). Tests: `ui-watchdog.test.ts`,
+  `crash.test.tsx`, `node-shape.test.ts`.
 
-## Solid 2 traps hit in this repo
+## Reze traps hit in this repo
 
-- **Writes are deferred.** Reading a signal right after `setX()` yields the old value.
-  `NumberRow` commits from `e.currentTarget.value`, _not_ from its draft signal: a blur in
-  the same task as the last keystroke would otherwise commit the stale draft.
-- **Component-body reads need `untrack`.** `createSignal(allPresets()[0]?.name)` in
-  `CodeTab` was a `STRICT_READ_UNTRACKED` warning until wrapped in `untrack(...)` — use it
-  for deliberate one-time snapshots instead of leaving the warning.
-- **Don't hand Kobalte a reactive value its body reads.** `ComboboxBase` reads `options`
-  where it cannot track; passing a memo (`createMemo(() => nodeMenuEntries().map(...))`) warned,
-  passing a module-level array does not.
-- **Async continuations capture props they need** before the first `await`/`.then`
-  (see `PathRow.lookup`/`onBlur`): untracked reads there are lint warnings and hide bugs.
-- **State that outlives a view belongs to the module, not to the component.** The panel
-  renders its tabs through a `Switch`, so leaving a tab unmounts it — an object created in
-  the component body (the run client did this) closed its WebSocket on the way out, and the
-  server read that as a disconnect and cancelled the job. `runClient` is now a module-level
-  singleton (`run-client.ts`) and `RunTab` only borrows it; the socket, the progress and the
-  journal survive any tab switch.
-- Effects are split (`createEffect(compute, apply)`), cleanups are returned from `apply`,
-  context wrappers do not exist — call `useContext(NodesContext)` directly (it throws on a
-  missing provider by itself).
-- **`onCleanup` is forbidden inside `onSettled`** (and `createTrackedEffect`): it throws
-  `[CLEANUP_IN_FORBIDDEN_SCOPE]` and, worse, **halts the reactive system** — the app renders
-  once and then every click silently does nothing, with no error in the page. Subscribe to
-  event listeners the Solid way: return the unsubscribe function from the `onSettled`
-  callback. Symptom to recognise: `[REACTIVITY_HALTED] An uncaught error halted the reactive
-system` in the console, and clicking anything (even unrelated buttons) has no effect.
-  Always capture console/pageerror on a fresh load before believing "the handler is broken".
+- **Signal writes are visible at once**; DOM and effects update on a microtask. Tests call `tick()`
+  (`@rezejs/testing-library` — see **Tests**) after a write before asserting on the DOM.
+- **An `effect` runs synchronously when created**, before the JSX below it exists, and refs are unset then.
+  There is no mount hook. Keep the element in a signal set by `ref={(el) => (node = el)}` and
+  read that signal in the effect, or defer the DOM work with `queueMicrotask` inside it. Startup work in
+  `App` (`seedModelNames`, plugin start, run recovery) runs in a `queueMicrotask` after the first render.
+- **`props.children` is read once by `@rebase-ui/reze` components (F2)**: a reactive single-expression child
+  (`{render(label)}`) freezes. Wrap it in a fragment at the call site (`<>{expr}</>`), e.g. `UiTabs` tab
+  labels and panel content. Verify the value updates after a language flip.
+- **Rows must be DOM nodes or arrays of nodes, not functions (F1)**: a `For` row whose value is a function
+  (`Show`, `dynamic`, a ternary, `Errored`, and in dev the `hotComponent` proxies) rebuilds on every list
+  change. `overridable` is therefore split into `resolveOverride(id, Base)` (read where the instance is
+  built) and `overrideKey(id)` (`NodeStack` rebuilds the rows on that key). Regression test:
+  `node-card/reorder-identity.test.tsx`. Verify list identity against the **production build**
+  (`pnpm build` + `pnpm serve`), not `pnpm dev` — dev HMR proxies are function rows.
+- **Read props where they are used.** Destructured props and `const x = props.y` copies are compiler
+  diagnostics (`PROPS_DESTRUCTURED`, `SIGNAL_READ_ONCE`), not style.
+- **`role` is `attr:role` (F6)**: the compiler flags `role` as `UNKNOWN_ATTRIBUTE` although it is typed.
+- **Module state outlives a view.** The panel renders its tabs through a `Switch`, so leaving a tab unmounts
+  it — an object created in the component body (the run client did this) closed its WebSocket on the way
+  out, and the server read that as a disconnect and cancelled the job. `runClient` is now a module-level
+  singleton (`run-client.ts`) and `RunTab` only borrows it; the socket, the progress and the journal survive
+  any tab switch.
+- **Cleanup belongs to the effect.** `onCleanup` is allowed inside `effect`; subscribe to event listeners by
+  returning/registering the unsubscribe there (`onCleanup(() => off())`). A listener that is only attached and
+  never released leaks across tab switches.
+- Async continuations capture props they need before the first `await`/`.then`
+  (see `PathRow.lookup`/`onBlur`): reads of reactive values after an `await` are untracked and hide bugs.
+- Module-level reactive state is private to its module (R1): export accessor **functions** (`locale()`,
+  `endpoint()`), not signals, unless a Reze component consumes the signal directly.
+- Always capture console/pageerror on a fresh load before believing "the handler is broken".
 
 ## Diagnostics workflow (dev)
 
-`vite.config.ts` has `solid({ diagnostics: true })`. Console warnings name a component:
-`STRICT_READ_UNTRACKED`, `REACTIVE_WRITE_IN_OWNED_SCOPE`, `HUGE_FAN_OUT`, … The repair table
-is `node_modules/solid-js/skills/reactivity-diagnostics/SKILL.md`.
-
-Current baseline: **4 warnings, all inside `@kobalte/core` (combobox-base) /
-`@solid-primitives/controlled-signal`** — app code is clean. Do not chase them here; they are
-upstream in the kobalte fork. To attribute a warning, patch `console.warn` via
-`page.evaluateOnNewDocument` and read `new Error().stack`.
+`vite.config.ts` has `reze({ analyze: ["@rebase-ui/reze"], diagnostics: { jsonl: "node_modules/.cache/reze-diagnostics.jsonl" } })`.
+The compiler writes one line per finding to that file. Codes that must not appear in app code (migration
+gate P6.3): `SIGNAL_READ_ONCE`, `PROPS_DESTRUCTURED`, `INLINE_EACH`, `KEY_ON_ELEMENT`, `UNKNOWN_ATTRIBUTE`,
+`EVENT_NAME_LOWERCASE`, `FLOW_PARAM_CALLED`. Review the file after a UI change; it is the fastest way to find
+a read that is not tracked. Upstream `@rebase-ui/reze` findings are reported upstream, not patched around
+except through `patches/@rebase-ui__reze@0.1.2.patch`.
 
 ## UI verification cheatsheet (headless browser)
 
-- Kobalte controls need dispatched pointer events, not `el.click()`:
+- `@rebase-ui/reze` controls (Base UI based) need dispatched pointer events, not `el.click()`:
   `pointerdown` + `pointerup` + `click` (all `bubbles`, `pointerId: 1`, `isPrimary: true`).
 - The add-node combobox is `aside input[role='combobox']`; plain `aside input` matches the
   hidden `Switch.Input` checkboxes first (role `switch`).
@@ -254,7 +265,7 @@ upstream in the kobalte fork. To attribute a warning, patch `console.warn` via
   swallow the fold.
 - **A whole row as drag source needs no selector list**: `createDragReorder`'s
   `ownsPress` walks from the press target up to the source and refuses the press
-  when any step is a control or _wraps_ one — the visible parts of a Kobalte switch
+  when any step is a control or _wraps_ one — the visible parts of a switch
   are plain divs, so matching the target alone misses them.
 - **Numeric entry is one component**: `NumberField` (input + ▲/▼ steppers) backs both
   `NumberRow` and `SliderRow`, so limits behave the same everywhere — in-range edits
@@ -267,8 +278,7 @@ upstream in the kobalte fork. To attribute a warning, patch `console.warn` via
   type, rendered through `import.meta.glob` in `ConfigPanel`.
 - The Code tab's JSON view is `sugar-high` (`sugar-high/core` + `sugar-high/lang/json`, not the
   full registry — one format must not pull 29 grammars). It escapes its input and returns an
-  HTML string, so it needs an `innerHTML` write with a `solid/no-innerhtml` disable comment.
-  Facts that cost real debugging time: its line spans are separated by **literal newlines** and
+  HTML string, so it needs an `innerHTML` write (the only one in the app; keep it that way). Facts that cost real debugging time: its line spans are separated by **literal newlines** and
   `white-space: pre-wrap` breaks them — never set `display: block` on `.sh__line`, that renders
   the newline _and_ a block box, doubling the line pitch.
 - Editing is a transparent `<textarea>` stacked on the highlight layer in one grid cell
@@ -288,7 +298,7 @@ upstream in the kobalte fork. To attribute a warning, patch `console.warn` via
     `clientWidth`, and a click at a known pixel of line _n_ must put the caret at line _n_.
     Re-highlighting is a single memo over a sub-millisecond parse — no debounce, no cache: do not
     reintroduce either.
-- `Ui*` = Kobalte-backed control wrapper (`UiSelect`, `UiCombobox`, `UiSwitch`, `UiTabs`,
+- `Ui*` = `@rebase-ui/reze`-backed control wrapper (Base UI; `UiSelect`, `UiCombobox`, `UiSwitch`, `UiTabs`,
   `UiSlider`); plain names = static primitives (`Input`, `Label`, `Icon`). Wording comes from
   the dictionaries — see **i18n** below. Node names are `nodeRegistry.get(type).label` rendered
   through `nodeLabel(type)`; nothing matches a node by its display name.
@@ -399,9 +409,9 @@ Rules that the implementation depends on:
   `lang="ru"` (the shell cannot know the visitor). The language is chosen in the **Settings** panel tab
   (`components/config-panel/tabs/settings-tab.tsx`, a `UiSelect` over `LOCALE_NAMES`) — the right column is where
   preferences live; there is no switch in the toolbar.
-- Tests: `setLocale()` is an ordinary signal write, so a test that reads a message in the same
-  tick needs `flush()` from `solid-js` — `src/lib/i18n/i18n.test.ts` and
-  `run-format.test.ts` both wrap it in a `use(locale)` helper. `i18n.test.ts` also asserts the
+- Tests: `setLocale()` is an ordinary signal write, but the DOM and effects update on a microtask, so a test
+  that reads a message after a switch calls `tick()` from `@rezejs/testing-library` — `src/lib/i18n/i18n.test.ts`
+  and `run-format.test.ts` both wrap it in a `use(locale)` helper. `i18n.test.ts` also asserts the
   two dictionaries have identical key sets and no empty strings.
 
 ## Workspace layout (no top bar)
@@ -425,9 +435,9 @@ when `phone()`), so the toolbar has no panel toggles there.
 `plugin.json` files; `catalog.test.ts` fails when it drifts from manifests or code hashes. The catalog section is closed by default, loads
 on first open and has a search (`searchCatalog`); it sits below the installed list. Descriptions: `description` +
 optional `descriptions: {ru,en}`, read through `pluginDescription(source, locale())`. A panel tab registered by a plugin
-gets `scroll: true` (the panel scrolls it); host tabs that scroll themselves leave it off. `onSettled`/effect callbacks
-must not read reactive values (STRICT_READ_UNTRACKED): wrap in `untrack` or read in the compute; persist big stores from
-a revision counter, not `JSON.stringify(store)` in an effect (HUGE_FAN_IN). Puppeteer's console type for `console.warn` is
+gets `scroll: true` (the panel scrolls it); host tabs that scroll themselves leave it off. Keep effects to what they
+mean to track: `untrack` the rest, and persist big stores from a revision counter rather than serialising the whole
+store on every write. Puppeteer's console type for `console.warn` is
 `warn`, not `warning` — filter on both or you will miss them. `lib/plugins/catalog.ts`
 reads it (valibot schema, manifest links resolved against the catalog URL); `CatalogSection` in the Plugins tab
 fills the URL field and calls `pluginRuntime.preview(url, pin)` — `pin` must equal the manifest's integrity or the
@@ -463,7 +473,7 @@ Three widths are supported and they are _not_ the same rule:
 - The phone branch is `PHONE_QUERY = "(max-width: 700px), (pointer: coarse) and (max-height: 500px)"` in
   `workspace.tsx` and the **same query text** must stay in `workspace.module.scss` — `createMediaQuery`
   (`src/hooks/use-media-query.ts`) drives the JS side: `shown()` returns one column, `hidden(key)` becomes
-  "not the active panel", the bottom nav calls `setPhonePanel`, and its buttons are never `disabled` (a switcher always has
+  "not the active panel", the bottom nav sets `phonePanel`, and its buttons are never `disabled` (a switcher always has
   exactly one active item).
 - A phone shows **two** panels — `PHONE_COLUMN_KEYS = ["middle", "right"]`: the node list is a second view of
   the same stack, so it is dropped and what was unique to it moved onto the stack panel, phone-only, driven by
@@ -479,7 +489,7 @@ Three widths are supported and they are _not_ the same rule:
 - The nav is `position: fixed` (z-index 10, under the 50/60 popper layers) and `.columns` reserves it with
   `padding-bottom: calc(var(--nav-h) + var(--safe-bottom))` — `--nav-h` is defined once on `.workspace`.
   Heights use `dvh`, edges use `--safe-*` (from `env(safe-area-inset-*)`, 0 where there is no cutout), and
-  `Document.tsx` must keep `viewport-fit=cover` for those insets to be non-zero.
+  `index.html` must keep `viewport-fit=cover` for those insets to be non-zero.
 - `@media (pointer: coarse)` is the touch switch, never a width query: `--font-size-field` becomes 16px
   (iOS zooms the page on focusing anything smaller and never zooms back), `--touch-min` (40px) sizes every
   control, and the number steppers go from stacked to side by side. Coarse rules also apply on a tablet that
@@ -503,7 +513,7 @@ The list comes from the **runner** (`models` method, `WS_API.md`); the runner fe
 `https://mdb.yor.ovh/v1/files`, keeps a disk copy and refreshes it, so reachability is the deployment's
 property, not the visitor's. `src/lib/model-db.ts` keeps it in memory for the whole session:
 
-- `seedModelNames()` runs from `App` (`onSettled`) and fills the index from the `reline-web:mdb:v2` localStorage
+- `seedModelNames()` runs from `App` at startup (in a `queueMicrotask` after the first render) and fills the index from the `reline-web:mdb:v2` localStorage
   copy with **no network** — the page must not dial the runner (a public page probing `127.0.0.1`) before anyone
   needs the list. `modelNames()` asks the runner when nothing is loaded, and serves a copy older than
   `CACHE_TTL_MS` (6 h) while refreshing behind the caller. `preloadModelNames()` (seed + ask when missing or old,
@@ -548,3 +558,5 @@ A top-level **array** (instead of `{nodes, preprocess}`) is the old shape: `down
 - `src/context/reducer.test.ts` — uid identity invariants (CHANGE-by-uid, survivor
   identity, MOVE without cloning, ADD, IMPORT fresh uids). Extend it when you touch
   `src/context/reducer.ts`; it is the fastest way to prove no remount storm was reintroduced.
+- Component tests use `@rezejs/testing-library` (`mount`, `fire`, `settle`, `tick`, `cleanup`); `afterEach(cleanup)`.
+  The old `flush()` is gone: a write is visible at once, the DOM needs `tick()`.

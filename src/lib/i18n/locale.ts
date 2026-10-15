@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { signal } from "reze-js";
 import { storage } from "~/lib/storage";
 
 /** The languages the UI ships. The type is deliberately narrow: every
@@ -38,14 +38,14 @@ const initial = (): Locale => {
     : "en";
 };
 
-const [locale, setLocaleSignal] = createSignal<Locale>(initial());
+let current = signal<Locale>(initial());
 
-export { locale };
+export const locale = (): Locale => current;
 
 /** Switching costs one write and one signal set: every label in the app reads
  * `locale()` through `t()`, so nothing else has to be invalidated by hand. */
 export const setLocale = (next: Locale): void => {
-  setLocaleSignal(next);
+  current = next;
   // storage unavailable — the choice lives for this session
   storage.set(STORAGE_KEY, next);
 };

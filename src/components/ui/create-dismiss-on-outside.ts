@@ -1,9 +1,8 @@
-import { createEffect } from "solid-js";
+import { effect, onCleanup, untrack } from "reze-js";
 
 /**
- * Kobalte's dismissable layer does not close the listbox on outside
- * interaction under solid 2 rc — close it ourselves: any pointer down that
- * lands outside the trigger block and the portaled content, plus Escape.
+ * Closes a listbox on outside interaction: any pointer down that lands outside
+ * the trigger block and the portaled content, plus Escape.
  *
  * Shared by UiSelect and UiCombobox (the two listbox-style controls).
  */
@@ -12,11 +11,9 @@ export const createDismissOnOutside = (
   setOpen: (value: boolean) => void,
   containers: () => Array<HTMLElement | undefined>,
 ): void => {
-  createEffect(
-    () => open(),
-    (isOpen) => {
-      if (!isOpen) return;
-
+  effect(() => {
+    if (!open()) return;
+    untrack(() => {
       const onPointerDown = (e: PointerEvent) => {
         const target = e.target;
         if (
@@ -32,10 +29,10 @@ export const createDismissOnOutside = (
 
       document.addEventListener("pointerdown", onPointerDown, true);
       document.addEventListener("keydown", onKeyDown);
-      return () => {
+      onCleanup(() => {
         document.removeEventListener("pointerdown", onPointerDown, true);
         document.removeEventListener("keydown", onKeyDown);
-      };
-    },
-  );
+      });
+    });
+  });
 };
