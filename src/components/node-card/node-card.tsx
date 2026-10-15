@@ -13,7 +13,11 @@ import { useToggleEnabled } from "~/hooks/use-node-actions";
 import { nodeLabel } from "~/lib/nodes";
 import { NodeOptionsForm } from "~/components/nodes/node-options-form";
 import { Slot } from "~/components/slot/slot";
-import { overridable } from "~/components/slot/overridable";
+import {
+  overridable,
+  overrideKey,
+  resolveOverride,
+} from "~/components/slot/overridable";
 import { NodeSwap } from "~/components/node-swap/node-swap";
 import { DiagnosticList } from "~/components/diagnostics/diagnostic-list";
 import { Icon, UiSwitch } from "~/components/ui";
@@ -260,8 +264,6 @@ const NodeCardImpl: Component<NodeCardProps> = (props) => {
   );
 };
 
-const NodeCardView = overridable("NodeCard", NodeCardImpl);
-
 export interface NodeCardsProps {
   selectedUid: () => string | null;
   /** Per-row selection check: only the rows whose state changes re-render on
@@ -312,23 +314,34 @@ export const NodeStack: Component<NodeCardsProps> = (props) => {
     });
   });
 
+  // Rows are built from the override chain as it is when the list is built, and
+  // the list is rebuilt when the chain changes. A row that followed the chain
+  // itself would be a binding, and a list of bindings rebuilds every row on any
+  // add, move or delete — each card would lose its form state and focus.
+  const cards = (_chain: string) => {
+    const Card = resolveOverride("NodeCard", NodeCardImpl);
+    return (
+      <For each={nodes}>
+        {(node, index) => (
+          <Card
+            node={node}
+            index={index}
+            selected={props.isSelected(node.uid)}
+            onSelect={props.onSelect}
+            dragIndex={dragIndex}
+            dropIndex={dropIndex}
+            handlers={handlers}
+            phone={props.phone}
+          />
+        )}
+      </For>
+    );
+  };
+
   return (
     <>
       <div class={styles.stack} ref={(el) => (stack = el)}>
-        <For each={nodes}>
-          {(node, index) => (
-            <NodeCardView
-              node={node}
-              index={index}
-              selected={props.isSelected(node.uid)}
-              onSelect={props.onSelect}
-              dragIndex={dragIndex}
-              dropIndex={dropIndex}
-              handlers={handlers}
-              phone={props.phone}
-            />
-          )}
-        </For>
+        {cards(overrideKey("NodeCard"))}
         <div
           class={{
             [styles.dropPlaceholder]: true,

@@ -9,17 +9,37 @@
 
 const CONFIG_KEY = "reline-web:config";
 const LAYOUT_KEY = "reline-web:layout:v2";
-const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const UUID_RE =
+  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 const VIEWPORTS = [
-  { name: "1400x900", width: 1400, height: 900, isMobile: false, hasTouch: false },
-  { name: "800x900", width: 800, height: 900, isMobile: false, hasTouch: false },
+  {
+    name: "1400x900",
+    width: 1400,
+    height: 900,
+    isMobile: false,
+    hasTouch: false,
+  },
+  {
+    name: "800x900",
+    width: 800,
+    height: 900,
+    isMobile: false,
+    hasTouch: false,
+  },
   { name: "390x844", width: 390, height: 844, isMobile: true, hasTouch: true },
   { name: "320x640", width: 320, height: 640, isMobile: true, hasTouch: true },
   { name: "844x390", width: 844, height: 390, isMobile: true, hasTouch: true },
 ];
 
-const CONFIG_TABS = ["Instructions", "Code", "Presets", "Run", "Settings", "Plugins"];
+const CONFIG_TABS = [
+  "Instructions",
+  "Code",
+  "Presets",
+  "Run",
+  "Settings",
+  "Plugins",
+];
 
 // Sleep never exceeds 600 ms.
 const sleep = (ms) => new Promise((r) => setTimeout(r, Math.min(ms, 600)));
@@ -37,14 +57,25 @@ const PRESS = (d) => {
   if (!root) return { found: false, reason: `no card ${d.card}` };
   let els = [...root.querySelectorAll(d.sel)];
   if (d.any !== undefined)
-    els = els.filter((e) => e.getAttribute("aria-label") === d.any || e.textContent.trim() === d.any);
-  if (d.text !== undefined) els = els.filter((e) => e.textContent.trim() === d.text);
-  if (d.startsWith !== undefined) els = els.filter((e) => e.textContent.trim().startsWith(d.startsWith));
+    els = els.filter(
+      (e) =>
+        e.getAttribute("aria-label") === d.any ||
+        e.textContent.trim() === d.any,
+    );
+  if (d.text !== undefined)
+    els = els.filter((e) => e.textContent.trim() === d.text);
+  if (d.startsWith !== undefined)
+    els = els.filter((e) => e.textContent.trim().startsWith(d.startsWith));
   if (d.firstLine !== undefined)
-    els = els.filter((e) => (e.innerText || "").trim().split("\n")[0].trim() === d.firstLine);
-  if (d.label !== undefined) els = els.filter((e) => e.getAttribute("aria-label") === d.label);
+    els = els.filter(
+      (e) => (e.innerText || "").trim().split("\n")[0].trim() === d.firstLine,
+    );
+  if (d.label !== undefined)
+    els = els.filter((e) => e.getAttribute("aria-label") === d.label);
   if (d.labelStarts !== undefined)
-    els = els.filter((e) => (e.getAttribute("aria-label") || "").startsWith(d.labelStarts));
+    els = els.filter((e) =>
+      (e.getAttribute("aria-label") || "").startsWith(d.labelStarts),
+    );
   if (d.visible) els = els.filter((e) => e.getBoundingClientRect().width > 0);
   const el = els[d.index || 0];
   if (!el) return { found: false, matches: els.length };
@@ -67,16 +98,24 @@ const PRESS = (d) => {
     el.dispatchEvent(new PointerEvent("pointerup", { ...base, buttons: 0 }));
     el.dispatchEvent(new MouseEvent("click", { ...base, buttons: 0 }));
   }
-  return { found: true, count: els.length, tag: el.tagName, label: el.getAttribute("aria-label") };
+  return {
+    found: true,
+    count: els.length,
+    tag: el.tagName,
+    label: el.getAttribute("aria-label"),
+  };
 };
 
 const READ_CARDS = () =>
   [...document.querySelectorAll("section[data-node-id]")].map((s) => {
     const sw = s.querySelector("[role=switch]");
     const label = sw ? sw.getAttribute("aria-label") || "" : "";
-    const chev = s.querySelector('button[aria-label="Collapse node"],button[aria-label="Expand node"]');
+    const chev = s.querySelector(
+      'button[aria-label="Collapse node"],button[aria-label="Expand node"]',
+    );
     const dataAttrs = {};
-    for (const a of s.attributes) if (a.name.startsWith("data-")) dataAttrs[a.name] = a.value;
+    for (const a of s.attributes)
+      if (a.name.startsWith("data-")) dataAttrs[a.name] = a.value;
     const head = s.firstElementChild;
     return {
       uid: s.getAttribute("data-node-id"),
@@ -90,7 +129,9 @@ const READ_CARDS = () =>
   });
 
 const READ_TABPANEL = () => {
-  const p = [...document.querySelectorAll("[role=tabpanel]")].find((x) => x.getBoundingClientRect().height > 0);
+  const p = [...document.querySelectorAll("[role=tabpanel]")].find(
+    (x) => x.getBoundingClientRect().height > 0,
+  );
   if (!p) return null;
   return (p.innerText || "").replace(/\s+/g, " ").trim().slice(0, 400);
 };
@@ -106,7 +147,12 @@ const MEASURE = () => {
   const R = (e) => {
     if (!e) return null;
     const r = e.getBoundingClientRect();
-    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+    return {
+      x: Math.round(r.x),
+      y: Math.round(r.y),
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+    };
   };
   const cards = [...document.querySelectorAll("section[data-node-id]")];
   const expandBtn = document.querySelector(
@@ -119,13 +165,15 @@ const MEASURE = () => {
     while (e && !e.contains(cards[0])) e = e.parentElement;
     stack = e;
     let t = expandBtn;
-    while (t && t.parentElement && t.parentElement !== stack) t = t.parentElement;
+    while (t && t.parentElement && t.parentElement !== stack)
+      t = t.parentElement;
     toolbar = t;
   }
   const outline = document.querySelector("aside");
   const tablist = document.querySelector("[role=tablist]");
   let config = tablist;
-  while (config && !config.querySelector("[role=tabpanel]")) config = config.parentElement;
+  while (config && !config.querySelector("[role=tabpanel]"))
+    config = config.parentElement;
   const switcher = document.querySelector("[role=group][aria-label]");
   const de = document.documentElement;
   const tabs = [...document.querySelectorAll("[role=tab]")].map((t) => ({
@@ -134,8 +182,15 @@ const MEASURE = () => {
   }));
   const burger = document.querySelector('button[aria-label="More tabs"]');
   return {
-    regions: { stack: R(stack), outline: R(outline), config: R(config), switcher: R(switcher) },
-    toolbarText: toolbar ? (toolbar.innerText || "").replace(/\s+/g, " ").trim() : null,
+    regions: {
+      stack: R(stack),
+      outline: R(outline),
+      config: R(config),
+      switcher: R(switcher),
+    },
+    toolbarText: toolbar
+      ? (toolbar.innerText || "").replace(/\s+/g, " ").trim()
+      : null,
     toolbarRect: R(toolbar),
     overflow: {
       scrollWidth: de.scrollWidth,
@@ -162,7 +217,9 @@ const MEASURE = () => {
 };
 
 const CODE_VIEW = () => {
-  const panel = [...document.querySelectorAll("[role=tabpanel]")].find((p) => p.getBoundingClientRect().height > 0);
+  const panel = [...document.querySelectorAll("[role=tabpanel]")].find(
+    (p) => p.getBoundingClientRect().height > 0,
+  );
   if (!panel) return null;
   const ta = panel.querySelector("textarea");
   const pre = panel.querySelector("pre");
@@ -180,8 +237,16 @@ const CODE_VIEW = () => {
           ariaInvalid: ta.getAttribute("aria-invalid"),
         }
       : null,
-    pre: pre ? { scrollHeight: pre.scrollHeight, clientWidth: pre.clientWidth, text: pre.textContent } : null,
-    alerts: [...panel.querySelectorAll("[role=alert]")].map((a) => a.textContent.trim()),
+    pre: pre
+      ? {
+          scrollHeight: pre.scrollHeight,
+          clientWidth: pre.clientWidth,
+          text: pre.textContent,
+        }
+      : null,
+    alerts: [...panel.querySelectorAll("[role=alert]")].map((a) =>
+      a.textContent.trim(),
+    ),
     errorLines,
   };
 };
@@ -189,7 +254,10 @@ const CODE_VIEW = () => {
 const SET_TEXTAREA = (value) => {
   const ta = document.querySelector("[role=tabpanel] textarea");
   if (!ta) return false;
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLTextAreaElement.prototype,
+    "value",
+  ).set;
   setter.call(ta, value);
   ta.dispatchEvent(new Event("input", { bubbles: true }));
   return true;
@@ -209,7 +277,8 @@ function normaliseUids(report, origin) {
     return map.get(k);
   };
   const walk = (v) => {
-    if (typeof v === "string") return v.split(origin).join("<origin>").replace(UUID_RE, id);
+    if (typeof v === "string")
+      return v.split(origin).join("<origin>").replace(UUID_RE, id);
     if (Array.isArray(v)) return v.map(walk);
     if (v && typeof v === "object") {
       const o = {};
@@ -235,7 +304,9 @@ async function waitFor(page, fn, arg, timeoutMs) {
 async function waitReady(page, timeoutMs) {
   return waitFor(
     page,
-    () => !!document.querySelector("[role=tablist]") && document.querySelectorAll("section[data-node-id]").length > 0,
+    () =>
+      !!document.querySelector("[role=tablist]") &&
+      document.querySelectorAll("section[data-node-id]").length > 0,
     undefined,
     timeoutMs,
   );
@@ -246,25 +317,54 @@ async function waitReady(page, timeoutMs) {
 async function openTab(page, name) {
   const isSelected = () =>
     page.evaluate(
-      (n) => [...document.querySelectorAll("[role=tab]")].find((t) => t.textContent.trim() === n)?.getAttribute("aria-selected") === "true",
+      (n) =>
+        [...document.querySelectorAll("[role=tab]")]
+          .find((t) => t.textContent.trim() === n)
+          ?.getAttribute("aria-selected") === "true",
       name,
     );
   await page.keyboard.press("Escape");
   await sleep(200);
   const visible = await page.evaluate((n) => {
-    const t = [...document.querySelectorAll("[role=tab]")].find((x) => x.textContent.trim() === n);
+    const t = [...document.querySelectorAll("[role=tab]")].find(
+      (x) => x.textContent.trim() === n,
+    );
     return !!t && t.getBoundingClientRect().width > 0;
   }, name);
   if (visible) {
     await pressIn(page, { sel: "[role=tab]", text: name, visible: true });
-    await waitFor(page, (n) => [...document.querySelectorAll("[role=tab]")].find((t) => t.textContent.trim() === n)?.getAttribute("aria-selected") === "true", name, 2000);
+    await waitFor(
+      page,
+      (n) =>
+        [...document.querySelectorAll("[role=tab]")]
+          .find((t) => t.textContent.trim() === n)
+          ?.getAttribute("aria-selected") === "true",
+      name,
+      2000,
+    );
     await sleep(300);
     if (await isSelected()) return { via: "tab", found: true };
   }
   await pressIn(page, { sel: "button", any: "More tabs" });
-  await waitFor(page, (n) => [...document.querySelectorAll("[role=option]")].some((o) => o.textContent.trim() === n), name, 2000);
+  await waitFor(
+    page,
+    (n) =>
+      [...document.querySelectorAll("[role=option]")].some(
+        (o) => o.textContent.trim() === n,
+      ),
+    name,
+    2000,
+  );
   const r = await pressIn(page, { sel: "[role=option]", text: name });
-  await waitFor(page, (n) => [...document.querySelectorAll("[role=tab]")].find((t) => t.textContent.trim() === n)?.getAttribute("aria-selected") === "true", name, 2000);
+  await waitFor(
+    page,
+    (n) =>
+      [...document.querySelectorAll("[role=tab]")]
+        .find((t) => t.textContent.trim() === n)
+        ?.getAttribute("aria-selected") === "true",
+    name,
+    2000,
+  );
   await sleep(300);
   return { via: "overflow", found: r.found && (await isSelected()) };
 }
@@ -292,10 +392,18 @@ export async function collect(page, origin, options = {}) {
   const onConsole = (msg) => {
     const t = msg.type();
     if (t !== "warning" && t !== "error") return;
-    report.console.push({ type: t === "warning" ? "warn" : "error", text: msg.text(), step });
+    report.console.push({
+      type: t === "warning" ? "warn" : "error",
+      text: msg.text(),
+      step,
+    });
   };
   const onPageError = (err) => {
-    report.console.push({ type: "pageerror", text: String(err && err.message ? err.message : err), step });
+    report.console.push({
+      type: "pageerror",
+      text: String(err && err.message ? err.message : err),
+      step,
+    });
   };
   page.on("console", onConsole);
   page.on("pageerror", onPageError);
@@ -305,7 +413,10 @@ export async function collect(page, origin, options = {}) {
     try {
       report[section][name] = await fn();
     } catch (e) {
-      report[section][name] = { ok: false, details: { error: (e && e.message) || String(e) } };
+      report[section][name] = {
+        ok: false,
+        details: { error: (e && e.message) || String(e) },
+      };
     }
   };
 
@@ -315,13 +426,21 @@ export async function collect(page, origin, options = {}) {
   };
 
   const setDesktop = () =>
-    page.setViewport({ width: 1400, height: 900, isMobile: false, hasTouch: false, deviceScaleFactor: 1 });
+    page.setViewport({
+      width: 1400,
+      height: 900,
+      isMobile: false,
+      hasTouch: false,
+      deviceScaleFactor: 1,
+    });
 
   const cardsNow = () => page.evaluate(READ_CARDS);
   const uidsNow = async () => (await cardsNow()).map((c) => c.uid);
   const focusHandle = (uid) =>
     page.evaluate((u) => {
-      const h = document.querySelector(`section[data-node-id="${u}"] [data-drag-handle]`);
+      const h = document.querySelector(
+        `section[data-node-id="${u}"] [data-drag-handle]`,
+      );
       h?.focus();
       return !!h;
     }, uid);
@@ -339,7 +458,10 @@ export async function collect(page, origin, options = {}) {
     const details = await page.evaluate(() => ({
       title: document.title,
       lang: document.documentElement.getAttribute("lang"),
-      viewport: document.querySelector('meta[name="viewport"]')?.getAttribute("content") ?? null,
+      viewport:
+        document
+          .querySelector('meta[name="viewport"]')
+          ?.getAttribute("content") ?? null,
       icons: [...document.querySelectorAll('link[rel~="icon"]')].map((l) => ({
         rel: l.getAttribute("rel"),
         href: l.getAttribute("href"),
@@ -391,42 +513,81 @@ export async function collect(page, origin, options = {}) {
 
   // ---- interactions (desktop 1400) ----
   await run("interactions", "openNodesPanel", async () => {
-    const pressed = await page.evaluate(() => document.querySelector('button[title="Nodes"]')?.getAttribute("aria-pressed") ?? null);
+    const pressed = await page.evaluate(
+      () =>
+        document
+          .querySelector('button[title="Nodes"]')
+          ?.getAttribute("aria-pressed") ?? null,
+    );
     if (pressed !== "true") {
       await pressIn(page, { sel: 'button[title="Nodes"]' });
       await sleep(400);
     }
-    const w = await page.evaluate(() => Math.round(document.querySelector("aside")?.getBoundingClientRect().width ?? -1));
+    const w = await page.evaluate(() =>
+      Math.round(
+        document.querySelector("aside")?.getBoundingClientRect().width ?? -1,
+      ),
+    );
     return { ok: w > 0, details: { wasPressed: pressed, asideWidth: w } };
   });
 
   let addedUid = null;
   await run("interactions", "addNode", async () => {
     const before = (await cardsNow()).length;
-    const opened = await pressIn(page, { sel: 'aside button[aria-label="Add node"]' });
-    await waitFor(page, () => document.querySelectorAll("[role=option]").length > 0, undefined, waitMs);
-    const options = await page.evaluate(() => [...document.querySelectorAll("[role=option]")].map((o) => o.textContent.trim()));
-    const picked = await pressIn(page, { sel: "[role=option]", startsWith: "Level" });
+    const opened = await pressIn(page, {
+      sel: 'aside button[aria-label="Add node"]',
+    });
+    await waitFor(
+      page,
+      () => document.querySelectorAll("[role=option]").length > 0,
+      undefined,
+      waitMs,
+    );
+    const options = await page.evaluate(() =>
+      [...document.querySelectorAll("[role=option]")].map((o) =>
+        o.textContent.trim(),
+      ),
+    );
+    const picked = await pressIn(page, {
+      sel: "[role=option]",
+      startsWith: "Level",
+    });
     await sleep(500);
     const cards = await cardsNow();
     const last = cards.at(-1);
     addedUid = last ? last.uid : null;
     return {
-      ok: picked.found && cards.length === before + 1 && !!last && last.name === "Level",
-      details: { opened: opened.found, options, before, after: cards.length, lastName: last ? last.name : null },
+      ok:
+        picked.found &&
+        cards.length === before + 1 &&
+        !!last &&
+        last.name === "Level",
+      details: {
+        opened: opened.found,
+        options,
+        before,
+        after: cards.length,
+        lastName: last ? last.name : null,
+      },
     };
   });
 
   await run("interactions", "selectNode", async () => {
-    const rows = await page.evaluate(() => document.querySelectorAll("aside [data-node-id]").length);
+    const rows = await page.evaluate(
+      () => document.querySelectorAll("aside [data-node-id]").length,
+    );
     const r = await pressIn(page, { sel: "aside [data-node-id]", index: 0 });
     await sleep(400);
     const headline = await page.evaluate(READ_TABPANEL);
-    return { ok: r.found && rows > 0, details: { outlineRows: rows, instructionsPanel: headline } };
+    return {
+      ok: r.found && rows > 0,
+      details: { outlineRows: rows, instructionsPanel: headline },
+    };
   });
 
   await run("interactions", "foldUnfold", async () => {
-    const chevSel = 'button[aria-label="Collapse node"],button[aria-label="Expand node"]';
+    const chevSel =
+      'button[aria-label="Collapse node"],button[aria-label="Expand node"]';
     const before = (await cardsNow())[0];
     await pressIn(page, { card: 0, sel: chevSel });
     await sleep(400);
@@ -435,8 +596,13 @@ export async function collect(page, origin, options = {}) {
     await sleep(400);
     const after = (await cardsNow())[0];
     return {
-      ok: before.bodyOpen !== mid.bodyOpen && after.bodyOpen === before.bodyOpen,
-      details: { before: before.bodyOpen, mid: mid.bodyOpen, after: after.bodyOpen },
+      ok:
+        before.bodyOpen !== mid.bodyOpen && after.bodyOpen === before.bodyOpen,
+      details: {
+        before: before.bodyOpen,
+        mid: mid.bodyOpen,
+        after: after.bodyOpen,
+      },
     };
   });
 
@@ -445,7 +611,12 @@ export async function collect(page, origin, options = {}) {
     const renameInput = 'input[aria-label="Node name"]';
     const typeName = async (text) => {
       await pressIn(page, { card: 0, sel: 'button[aria-label="Rename node"]' });
-      const focused = await waitFor(page, (s) => !!document.querySelector(s), renameInput, 2000);
+      const focused = await waitFor(
+        page,
+        (s) => !!document.querySelector(s),
+        renameInput,
+        2000,
+      );
       if (!focused) return false;
       await page.evaluate((s) => {
         const el = document.querySelector(s);
@@ -461,7 +632,10 @@ export async function collect(page, origin, options = {}) {
     const mid = (await cardsNow())[0].name;
     const ok2 = await typeName(original);
     const restored = (await cardsNow())[0].name;
-    return { ok: ok1 && ok2 && mid === "Renamed" && restored === original, details: { original, mid, restored } };
+    return {
+      ok: ok1 && ok2 && mid === "Renamed" && restored === original,
+      details: { original, mid, restored },
+    };
   });
 
   await run("interactions", "enableGuard", async () => {
@@ -485,7 +659,10 @@ export async function collect(page, origin, options = {}) {
       disabledExceptLast.slice(0, -1).every((v) => v === "false") &&
       lastPressed.at(-1) === "true" &&
       JSON.stringify(restored) === JSON.stringify(initial);
-    return { ok, details: { initial, disabledExceptLast, lastPressed, restored } };
+    return {
+      ok,
+      details: { initial, disabledExceptLast, lastPressed, restored },
+    };
   });
 
   await run("interactions", "swapMenu", async () => {
@@ -493,14 +670,19 @@ export async function collect(page, origin, options = {}) {
     await pressIn(page, { card: 0, sel: 'button[aria-label^="Swap "]' });
     await sleep(400);
     const menu = await page.evaluate(() =>
-      [...document.querySelectorAll('[role=listbox] [role=option],[role=menu] [role=menuitem],[role=dialog]')].map((e) =>
-        e.textContent.trim().slice(0, 60),
-      ),
+      [
+        ...document.querySelectorAll(
+          "[role=listbox] [role=option],[role=menu] [role=menuitem],[role=dialog]",
+        ),
+      ].map((e) => e.textContent.trim().slice(0, 60)),
     );
     await page.keyboard.press("Escape");
     await sleep(300);
     const after = (await cardsNow()).length;
-    return { ok: before === after, details: { before, after, menu: menu.slice(0, 40) } };
+    return {
+      ok: before === after,
+      details: { before, after, menu: menu.slice(0, 40) },
+    };
   });
 
   await run("interactions", "reorderKeyboard", async () => {
@@ -514,8 +696,14 @@ export async function collect(page, origin, options = {}) {
     await sleep(400);
     const restored = await uidsNow();
     return {
-      ok: moved[1] === before[0] && JSON.stringify(restored) === JSON.stringify(before),
-      details: { beforeOrder: before, movedOrder: moved, restoredOrder: restored },
+      ok:
+        moved[1] === before[0] &&
+        JSON.stringify(restored) === JSON.stringify(before),
+      details: {
+        beforeOrder: before,
+        movedOrder: moved,
+        restoredOrder: restored,
+      },
     };
   });
 
@@ -526,7 +714,10 @@ export async function collect(page, origin, options = {}) {
     const uid = cards[idx].uid;
     const expandedByUs = !cards[idx].bodyOpen;
     if (expandedByUs) {
-      await pressIn(page, { card: idx, sel: 'button[aria-label="Collapse node"],button[aria-label="Expand node"]' });
+      await pressIn(page, {
+        card: idx,
+        sel: 'button[aria-label="Collapse node"],button[aria-label="Expand node"]',
+      });
       await sleep(400);
     }
     await page.evaluate((i) => {
@@ -536,12 +727,17 @@ export async function collect(page, origin, options = {}) {
     }, idx);
     const readNum = (i) =>
       page.evaluate(
-        (j) => document.querySelectorAll("section[data-node-id]")[j].querySelector("input[type=number]")?.value ?? null,
+        (j) =>
+          document
+            .querySelectorAll("section[data-node-id]")
+            [j].querySelector("input[type=number]")?.value ?? null,
         i,
       );
     const typeNum = async (i, text) => {
       await page.evaluate((j) => {
-        const el = document.querySelectorAll("section[data-node-id]")[j].querySelector("input[type=number]");
+        const el = document
+          .querySelectorAll("section[data-node-id]")
+          [j].querySelector("input[type=number]");
         el?.focus();
         el?.select();
       }, i);
@@ -559,13 +755,22 @@ export async function collect(page, origin, options = {}) {
     const numberBefore = await readNum(idx);
     const clampedHigh = await typeNum(idx, "999999999");
     const clampedLow = await typeNum(idx, "-5");
-    await pressIn(page, { card: idx, sel: 'button[aria-label^="Increase "]', index: 0 });
+    await pressIn(page, {
+      card: idx,
+      sel: 'button[aria-label^="Increase "]',
+      index: 0,
+    });
     await sleep(300);
     const stepUp = await readNum(idx);
-    await pressIn(page, { card: idx, sel: 'button[aria-label^="Decrease "]', index: 0 });
+    await pressIn(page, {
+      card: idx,
+      sel: 'button[aria-label^="Decrease "]',
+      index: 0,
+    });
     await sleep(300);
     const stepDown = await readNum(idx);
-    const restored = numberBefore === null ? null : await typeNum(idx, numberBefore);
+    const restored =
+      numberBefore === null ? null : await typeNum(idx, numberBefore);
     const sameAfterEdit = await sameCard();
 
     await focusHandle(uid);
@@ -581,7 +786,10 @@ export async function collect(page, origin, options = {}) {
       window.__parityCard = null;
     });
     if (expandedByUs) {
-      await pressIn(page, { card: indexRestored, sel: 'button[aria-label="Collapse node"]' });
+      await pressIn(page, {
+        card: indexRestored,
+        sel: 'button[aria-label="Collapse node"]',
+      });
       await sleep(300);
     }
 
@@ -615,7 +823,11 @@ export async function collect(page, origin, options = {}) {
     const cards = await cardsNow();
     const before = cards.length;
     const idx = cards.findIndex((c) => c.uid === addedUid);
-    if (idx < 0) return { ok: false, details: { error: "added node uid not found", addedUid } };
+    if (idx < 0)
+      return {
+        ok: false,
+        details: { error: "added node uid not found", addedUid },
+      };
     const removedName = cards[idx].name;
     await pressIn(page, { card: idx, sel: 'button[aria-label="Delete node"]' });
     await sleep(500);
@@ -635,21 +847,30 @@ export async function collect(page, origin, options = {}) {
 
   await run("i18n", "english", async () => {
     const via = await openTab(page, "Settings");
-    return { ok: via.found, details: { via: via.via, ...(await snapshotText()) } };
+    return {
+      ok: via.found,
+      details: { via: via.via, ...(await snapshotText()) },
+    };
   });
 
   await run("i18n", "toRussian", async () => {
-    await pressIn(page, { sel: '[role=tabpanel] button', text: "English" });
+    await pressIn(page, { sel: "[role=tabpanel] button", text: "English" });
     await sleep(300);
-    const picked = await pressIn(page, { sel: "[role=option]", text: "Русский" });
+    const picked = await pressIn(page, {
+      sel: "[role=option]",
+      text: "Русский",
+    });
     await sleep(500);
     return { ok: picked.found, details: await snapshotText() };
   });
 
   await run("i18n", "toEnglish", async () => {
-    await pressIn(page, { sel: '[role=tabpanel] button', text: "Русский" });
+    await pressIn(page, { sel: "[role=tabpanel] button", text: "Русский" });
     await sleep(300);
-    const picked = await pressIn(page, { sel: "[role=option]", text: "English" });
+    const picked = await pressIn(page, {
+      sel: "[role=option]",
+      text: "English",
+    });
     await sleep(500);
     return { ok: picked.found, details: await snapshotText() };
   });
@@ -659,13 +880,20 @@ export async function collect(page, origin, options = {}) {
     await run("tabs", name, async () => {
       const via = await openTab(page, name);
       const selected = await page.evaluate(
-        (n) => [...document.querySelectorAll("[role=tab]")].find((t) => t.textContent.trim() === n)?.getAttribute("aria-selected") ?? null,
+        (n) =>
+          [...document.querySelectorAll("[role=tab]")]
+            .find((t) => t.textContent.trim() === n)
+            ?.getAttribute("aria-selected") ?? null,
         name,
       );
       const headline = await page.evaluate(READ_TABPANEL);
       return {
         ok: via.found && selected === "true",
-        details: { via: via.via, selected, headline: headline && headline.slice(0, 200) },
+        details: {
+          via: via.via,
+          selected,
+          headline: headline && headline.slice(0, 200),
+        },
       };
     });
   }
@@ -682,14 +910,24 @@ export async function collect(page, origin, options = {}) {
       parsed = null;
     }
     const cards = await cardsNow();
-    const nodes = parsed && Array.isArray(parsed.nodes) ? parsed.nodes.length : null;
+    const nodes =
+      parsed && Array.isArray(parsed.nodes) ? parsed.nodes.length : null;
     return {
-      ok: parsed !== null && text === JSON.stringify(parsed, null, 2) && nodes === cards.length,
+      ok:
+        parsed !== null &&
+        text === JSON.stringify(parsed, null, 2) &&
+        nodes === cards.length,
       details: {
         text,
         nodes,
         cards: cards.length,
-        pre: view && view.pre ? { scrollHeight: view.pre.scrollHeight, clientWidth: view.pre.clientWidth } : null,
+        pre:
+          view && view.pre
+            ? {
+                scrollHeight: view.pre.scrollHeight,
+                clientWidth: view.pre.clientWidth,
+              }
+            : null,
       },
     };
   });
@@ -717,7 +955,11 @@ export async function collect(page, origin, options = {}) {
 
   await run("code", "applyValid", async () => {
     const parsed = JSON.parse(originalText);
-    const trimmed = JSON.stringify({ ...parsed, nodes: parsed.nodes.slice(0, -1) }, null, 2);
+    const trimmed = JSON.stringify(
+      { ...parsed, nodes: parsed.nodes.slice(0, -1) },
+      null,
+      2,
+    );
     const before = (await cardsNow()).length;
     await page.evaluate(SET_TEXTAREA, trimmed);
     await pressIn(page, { sel: "button", any: "Apply edit" });
@@ -729,7 +971,10 @@ export async function collect(page, origin, options = {}) {
     await pressIn(page, { sel: "button", any: "Apply edit" });
     await sleep(500);
     const restored = (await cardsNow()).length;
-    return { ok: afterApply === before - 1 && restored === before, details: { before, afterApply, restored } };
+    return {
+      ok: afterApply === before - 1 && restored === before,
+      details: { before, afterApply, restored },
+    };
   });
 
   await run("code", "applyInvalid", async () => {
@@ -759,24 +1004,39 @@ export async function collect(page, origin, options = {}) {
   // ---- presets ----
   await openTab(page, "Presets");
   await run("presets", "applyFirst", async () => {
-    const r = await pressIn(page, { sel: "[role=tabpanel] button", firstLine: "Default" });
+    const r = await pressIn(page, {
+      sel: "[role=tabpanel] button",
+      firstLine: "Default",
+    });
     await sleep(500);
     const cards = await cardsNow();
     return {
       ok: r.found,
-      details: { pressed: r, count: cards.length, types: cards.map((c) => c.name) },
+      details: {
+        pressed: r,
+        count: cards.length,
+        types: cards.map((c) => c.name),
+      },
     };
   });
 
   // ---- persistence ----
   await run("persistence", "stored", async () => {
-    await waitFor(page, (k) => localStorage.getItem(k) !== null, CONFIG_KEY, waitMs);
+    await waitFor(
+      page,
+      (k) => localStorage.getItem(k) !== null,
+      CONFIG_KEY,
+      waitMs,
+    );
     await sleep(550);
     const raw = await page.evaluate(READ_STORAGE, CONFIG_KEY);
     const cards = await cardsNow();
     return {
       ok: raw !== null,
-      details: { raw: raw === null ? null : JSON.parse(raw), cards: cards.map((c) => c.name) },
+      details: {
+        raw: raw === null ? null : JSON.parse(raw),
+        cards: cards.map((c) => c.name),
+      },
     };
   });
 
@@ -789,7 +1049,12 @@ export async function collect(page, origin, options = {}) {
     const rawAfter = await page.evaluate(READ_STORAGE, CONFIG_KEY);
     return {
       ok: ready && JSON.stringify(beforeCards) === JSON.stringify(afterCards),
-      details: { ready, beforeCards, afterCards, storageUnchanged: rawBefore === rawAfter },
+      details: {
+        ready,
+        beforeCards,
+        afterCards,
+        storageUnchanged: rawBefore === rawAfter,
+      },
     };
   });
 
@@ -798,7 +1063,9 @@ export async function collect(page, origin, options = {}) {
     const via = await openTab(page, "Plugins");
     await sleep(300);
     const panel = await page.evaluate(READ_TABPANEL);
-    const rows = await page.evaluate(() => document.querySelectorAll("li[data-state]").length);
+    const rows = await page.evaluate(
+      () => document.querySelectorAll("li[data-state]").length,
+    );
     return { ok: via.found, details: { via: via.via, panel, rows } };
   });
 
@@ -806,9 +1073,13 @@ export async function collect(page, origin, options = {}) {
     const r = await pressIn(page, { sel: "button", any: "Verified plugins" });
     await sleep(500);
     const panel = await page.evaluate(READ_TABPANEL);
-    const rows = await page.evaluate(() => document.querySelectorAll("li[data-state]").length);
+    const rows = await page.evaluate(
+      () => document.querySelectorAll("li[data-state]").length,
+    );
     const inputs = await page.evaluate(() =>
-      [...document.querySelectorAll("[role=tabpanel] input")].map((i) => i.placeholder || i.type),
+      [...document.querySelectorAll("[role=tabpanel] input")].map(
+        (i) => i.placeholder || i.type,
+      ),
     );
     return { ok: r.found, details: { panel, rows, inputs } };
   });
@@ -817,9 +1088,19 @@ export async function collect(page, origin, options = {}) {
     const keys = await page.evaluate(LIST_STORAGE_KEYS);
     const pluginKeys = keys.filter((k) => /plugin/i.test(k));
     const stored = {};
-    for (const k of pluginKeys) stored[k] = await page.evaluate(READ_STORAGE, k);
-    const rows = await page.evaluate(() => document.querySelectorAll("li[data-state]").length);
-    return { ok: rows === 0, details: { storageKeys: keys, pluginStorage: stored, installedRows: rows } };
+    for (const k of pluginKeys)
+      stored[k] = await page.evaluate(READ_STORAGE, k);
+    const rows = await page.evaluate(
+      () => document.querySelectorAll("li[data-state]").length,
+    );
+    return {
+      ok: rows === 0,
+      details: {
+        storageKeys: keys,
+        pluginStorage: stored,
+        installedRows: rows,
+      },
+    };
   });
 
   await setDesktop();

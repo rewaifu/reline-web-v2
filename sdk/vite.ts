@@ -55,7 +55,9 @@ const shimFor = (specifier: HostModule): string =>
     `if (host === undefined) throw new Error("Reline host not found: this plugin must be loaded by Reline");`,
     // `export const x = host.x` per name: a plugin imports names, and an ES
     // module needs them declared statically
-    ...hostExports[specifier].map((name) => `export const ${name} = host.${name};`),
+    ...hostExports[specifier].map(
+      (name) => `export const ${name} = host.${name};`,
+    ),
     "export default host;",
   ].join("\n");
 

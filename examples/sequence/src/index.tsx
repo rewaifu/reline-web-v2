@@ -1,12 +1,4 @@
-import {
-  For,
-  Show,
-  computed,
-  effect,
-  signal,
-  store,
-  untrack,
-} from "reze-js";
+import { For, Show, computed, effect, signal, store, untrack } from "reze-js";
 import {
   definePlugin,
   type PluginApiFor,

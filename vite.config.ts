@@ -22,6 +22,8 @@ export default defineConfig(({ command }) => ({
   },
   plugins: [
     reze({
+      // the library ships no current manifest: analyse its source instead
+      analyze: ["@rebase-ui/reze"],
       diagnostics: { jsonl: "node_modules/.cache/reze-diagnostics.jsonl" },
     }),
   ],

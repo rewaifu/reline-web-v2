@@ -219,7 +219,7 @@ toolbar badge + sequential runs → `examples/sequence/src/index.tsx`; worker re
   `examples/sequence/vite.config.ts`); `vite build` writes the module and `plugin.json` with `integrity`.
 - In this repo: `pnpm plugin:build` (sequence + catalog), `pnpm plugin:pin` (no-build example →
   `public/plugins/examples/writer-suffix/`, **outside the catalog**), `pnpm plugin:catalog`, `pnpm sdk:exports` after a Reze
-upgrade. CI rebuilds and `git diff --exit-code -- public/plugins`.
+  upgrade. CI rebuilds and `git diff --exit-code -- public/plugins`.
 - **Catalog** = `public/plugins/index.json`, generated from `public/plugins/<name>/plugin.json` (top level only). Each entry
   carries id, name, version, description(s), caps, sandbox, manifest path and the code `integrity`; installing from it refuses
   a manifest whose pin differs. `catalog.test.ts` fails on drift. Examples that must not be recommended go to

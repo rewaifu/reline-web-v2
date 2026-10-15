@@ -119,7 +119,9 @@ export const UiTabs: Component<UiTabsProps> = (props) => {
                 disabled={!onRow(index)}
                 data-overflow={onRow(index) ? undefined : ""}
               >
-                {render(tab.label)}
+                {/* the tab reads its children once: the fragment's binding is
+                    what follows a language switch */}
+                <>{render(tab.label)}</>
               </Tabs.Tab>
             )}
           </For>
@@ -138,7 +140,9 @@ export const UiTabs: Component<UiTabsProps> = (props) => {
         />
       </div>
       <Tabs.Panel value={props.value} class={styles.content}>
-        {props.content(props.value)}
+        {/* the panel reads its children once: the fragment's own binding is what
+            follows the selected value */}
+        <>{props.content(props.value)}</>
       </Tabs.Panel>
     </Tabs.Root>
   );

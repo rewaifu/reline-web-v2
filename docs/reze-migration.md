@@ -7,52 +7,52 @@ Baseline (main @ e0bf438): `pnpm test` 34 files / 325 tests, `pnpm lint`, `pnpm 
 
 ## Spike findings (/tmp/reze-spike, verified)
 
-| Area | Result |
-|---|---|
-| Vite + TS + vitest(jsdom) + `@rezejs/testing-library` | works; tsc clean |
-| Cross-module `export let x = signal()` read via a plain function (`t()`) | reactive; importer reads by name, writes only through exported functions |
-| `store` array: patch in place, `splice` move, `push` | `<For each={store}>` keeps DOM nodes (identity), reorder moves them |
-| `selector(() => sel)` in `<For>` rows | works (replaces `createProjection` selection) |
-| `computed(analyze([...nodes]))` | deep store reads tracked |
-| `catchError` as `Errored` (render **and** later binding errors) | works, fallback renders |
-| Uncaught effect error | thrown from `flush()`, system **not halted**, DOM keeps updating → ui-watchdog halt model is obsolete |
-| `effect` timing | first run is **synchronous at creation, before the JSX below it exists**; refs are unset. No `onMount`: keep elements in a signal via `ref` callback and read it in the effect |
-| Signal write | read-after-write returns new value; DOM/effects flush on microtask; `flush()` forces |
-| `@rebase-ui/reze@0.1.2` production build | **fails**: `ILLEGAL_REASSIGNMENT const ref` (compiler emits `ref = el` for `const ref = mergeRefs(...)`); dev/tests fine. Fix = `pnpm patch` (`const ref`→`let ref` in the sources) until upstream releases a fix |
-| Compiler lowers `signal` to getter fn; `export let` exports the getter | consumers must be compiled by the Reze plugin (tests, plugins, scripts) |
+| Area                                                                     | Result                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vite + TS + vitest(jsdom) + `@rezejs/testing-library`                    | works; tsc clean                                                                                                                                                                                                  |
+| Cross-module `export let x = signal()` read via a plain function (`t()`) | reactive; importer reads by name, writes only through exported functions                                                                                                                                          |
+| `store` array: patch in place, `splice` move, `push`                     | `<For each={store}>` keeps DOM nodes (identity), reorder moves them                                                                                                                                               |
+| `selector(() => sel)` in `<For>` rows                                    | works (replaces `createProjection` selection)                                                                                                                                                                     |
+| `computed(analyze([...nodes]))`                                          | deep store reads tracked                                                                                                                                                                                          |
+| `catchError` as `Errored` (render **and** later binding errors)          | works, fallback renders                                                                                                                                                                                           |
+| Uncaught effect error                                                    | thrown from `flush()`, system **not halted**, DOM keeps updating → ui-watchdog halt model is obsolete                                                                                                             |
+| `effect` timing                                                          | first run is **synchronous at creation, before the JSX below it exists**; refs are unset. No `onMount`: keep elements in a signal via `ref` callback and read it in the effect                                    |
+| Signal write                                                             | read-after-write returns new value; DOM/effects flush on microtask; `flush()` forces                                                                                                                              |
+| `@rebase-ui/reze@0.1.2` production build                                 | **fails**: `ILLEGAL_REASSIGNMENT const ref` (compiler emits `ref = el` for `const ref = mergeRefs(...)`); dev/tests fine. Fix = `pnpm patch` (`const ref`→`let ref` in the sources) until upstream releases a fix |
+| Compiler lowers `signal` to getter fn; `export let` exports the getter   | consumers must be compiled by the Reze plugin (tests, plugins, scripts)                                                                                                                                           |
 
 ## Idiom map
 
-| Solid 2 | Reze |
-|---|---|
-| `const [x, setX] = createSignal(v)` | `let x = signal(v)`; write `x = v` (declare per name; not in a returned tuple, not in a helper that returns it) |
-| passing `Accessor<T>` | prop `x={sig}` arrives as a getter on `props.x`; for non-JSX APIs pass `() => sig` |
-| `createMemo(() => expr)` | `const m = computed(expr)` (expression, not a function) |
-| `createEffect(compute, apply)` | `effect(() => { …reads…; untrack(() => …writes/side effects) ; onCleanup(…) })` (one function; `onCleanup` allowed) |
-| `onSettled(fn)` / mount | no hook: `effect` runs at creation; DOM-dependent work reads an element signal set by `ref={(el) => (node = el)}` or defers with `queueMicrotask` inside the effect |
-| `createStore` + `setStore(draft => …)` | `const s = store(v)`; mutate in place (`s.push`, `s[i].x = …`, `Object.assign(s[i].options, patch)`) |
-| `createProjection` selection | `selector(() => selectedUid)` → `isSelected(uid)` per row |
-| `createRoot(fn)` | `root(fn)` |
-| `createContext` / `useContext` | same names; context value passed through `<Ctx value={…}>`; reactive value = getter |
-| `Errored` / `createErrorBoundary` | own `Errored` over `catchError` (spike) |
-| `Dynamic` | `dynamic(() => C)` once per instance / `dynamicElement` |
-| `omit(props, …)` | `omitProps(props, …)` |
-| `ComponentProps<"div">`, `JSX` | `JSX.IntrinsicElements["div"]`, `import type { JSX } from "reze-js"`; `Component<P>` = `(props: P) => JSX.Element` |
-| `classList={{ a: x }}` / `class` | `class={{ a: x }}` or array |
-| `<Show>/<For>/<Switch>/<Match>/<Portal>` | same tags; `<For>` modes: identity (default), `keyed={fn}`, `keyed={false}`; row item/index read-as-signal rules differ per mode |
-| `flush()` in tests | `tick()` from `@rezejs/testing-library` (= `flush`); writes are already visible synchronously |
-| `@solidjs/testing-library render/fireEvent/cleanup` | `mount/fire/cleanup/tick/settle` |
-| `HydrationScript`, `Document.tsx`, `solid({start:true})` | plain `index.html` + `src/main.tsx` + `render()` (client only) |
-| `solid({diagnostics:true})`, `eslint-plugin-solid` | compiler diagnostics (`reze({diagnostics:{jsonl}})`), oxlint without the solid plugin |
-| destructured props / copy `const x = props.y` | read `props.y` where used; `PROPS_DESTRUCTURED`/`SIGNAL_READ_ONCE` are lint-level errors for us |
-| `onClick` etc. | same camel-case; `[handler, data]` form; `on:name` for custom events |
+| Solid 2                                                  | Reze                                                                                                                                                                |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `const [x, setX] = createSignal(v)`                      | `let x = signal(v)`; write `x = v` (declare per name; not in a returned tuple, not in a helper that returns it)                                                     |
+| passing `Accessor<T>`                                    | prop `x={sig}` arrives as a getter on `props.x`; for non-JSX APIs pass `() => sig`                                                                                  |
+| `createMemo(() => expr)`                                 | `const m = computed(expr)` (expression, not a function)                                                                                                             |
+| `createEffect(compute, apply)`                           | `effect(() => { …reads…; untrack(() => …writes/side effects) ; onCleanup(…) })` (one function; `onCleanup` allowed)                                                 |
+| `onSettled(fn)` / mount                                  | no hook: `effect` runs at creation; DOM-dependent work reads an element signal set by `ref={(el) => (node = el)}` or defers with `queueMicrotask` inside the effect |
+| `createStore` + `setStore(draft => …)`                   | `const s = store(v)`; mutate in place (`s.push`, `s[i].x = …`, `Object.assign(s[i].options, patch)`)                                                                |
+| `createProjection` selection                             | `selector(() => selectedUid)` → `isSelected(uid)` per row                                                                                                           |
+| `createRoot(fn)`                                         | `root(fn)`                                                                                                                                                          |
+| `createContext` / `useContext`                           | same names; context value passed through `<Ctx value={…}>`; reactive value = getter                                                                                 |
+| `Errored` / `createErrorBoundary`                        | own `Errored` over `catchError` (spike)                                                                                                                             |
+| `Dynamic`                                                | `dynamic(() => C)` once per instance / `dynamicElement`                                                                                                             |
+| `omit(props, …)`                                         | `omitProps(props, …)`                                                                                                                                               |
+| `ComponentProps<"div">`, `JSX`                           | `JSX.IntrinsicElements["div"]`, `import type { JSX } from "reze-js"`; `Component<P>` = `(props: P) => JSX.Element`                                                  |
+| `classList={{ a: x }}` / `class`                         | `class={{ a: x }}` or array                                                                                                                                         |
+| `<Show>/<For>/<Switch>/<Match>/<Portal>`                 | same tags; `<For>` modes: identity (default), `keyed={fn}`, `keyed={false}`; row item/index read-as-signal rules differ per mode                                    |
+| `flush()` in tests                                       | `tick()` from `@rezejs/testing-library` (= `flush`); writes are already visible synchronously                                                                       |
+| `@solidjs/testing-library render/fireEvent/cleanup`      | `mount/fire/cleanup/tick/settle`                                                                                                                                    |
+| `HydrationScript`, `Document.tsx`, `solid({start:true})` | plain `index.html` + `src/main.tsx` + `render()` (client only)                                                                                                      |
+| `solid({diagnostics:true})`, `eslint-plugin-solid`       | compiler diagnostics (`reze({diagnostics:{jsonl}})`), oxlint without the solid plugin                                                                               |
+| destructured props / copy `const x = props.y`            | read `props.y` where used; `PROPS_DESTRUCTURED`/`SIGNAL_READ_ONCE` are lint-level errors for us                                                                     |
+| `onClick` etc.                                           | same camel-case; `[handler, data]` form; `on:name` for custom events                                                                                                |
 
 ## Porting rules (contract for every slice)
 
 Order of precedence: these rules, then the idiom map, then the Reze docs (`/media/H/zed2/reze/reze-js/docs/src/routes/*.mdx`).
 
 - **R1 module-level reactive state is private.** `let s = signal(v)` inside the module; the public API keeps its
-  old shape — accessor *functions* (`export const locale = () => current`) and setter functions. Call sites outside the
+  old shape — accessor _functions_ (`export const locale = () => current`) and setter functions. Call sites outside the
   module do not change (`locale()` stays `locale()`); runtime tracking works through plain calls.
   Exported signals (`export let x = signal()`) only when the consumer is a Reze component and it is clearly simpler.
 - **R2 component-local state**: `let x = signal(v)`, read `x`, write `x = v`. Never `x()` on a signal; never
@@ -78,7 +78,7 @@ Order of precedence: these rules, then the idiom map, then the Reze docs (`/medi
   `EVENT_NAME_LOWERCASE`, `FLOW_PARAM_CALLED`.
 - **R11 clean cutover**: delete Solid workarounds that existed only because writes were deferred
   (plain-variable mirrors of signals, `flush()` after writes, `ownedWrite`, `untrack` for STRICT_READ warnings,
-  `createEffect(compute, apply)` splits). Keep comments that explain *why* the app behaves as it does; rewrite the
+  `createEffect(compute, apply)` splits). Keep comments that explain _why_ the app behaves as it does; rewrite the
   ones that explain Solid 2 traps. No TODOs, no stubs.
 - **R12 UI kit**: `@rebase-ui/reze/<part>` mirrors `@rebase-ui/solid/<part>` — same part names. Read
   `node_modules/@rebase-ui/reze/src/<part>` when unsure. A bug in it that blocks the build is fixed in
@@ -89,12 +89,14 @@ Order of precedence: these rules, then the idiom map, then the Reze docs (`/medi
 ## Phases and tasks
 
 ### P0 Safety net (before any port)
+
 - P0.1 baseline gates recorded (done, see top)
 - P0.2 baseline worktree of `main` built and served (port 3001) for side-by-side comparison
 - P0.3 parity harness `scripts/parity/`: one puppeteer scenario run against two origins → JSON report (DOM text of stack/panels, geometry at 1400/800/390/320, console warn+error, localStorage writes, tab overflow, selection, drag reorder, i18n flip, plugin install flow, code tab overlay alignment). Diff = bug list
 - P0.4 behaviour inventory: every invariant in `.omp/skills/reline-web/SKILL.md` maps to a test or a parity step (table in this file, below)
 
 ### P1 Toolchain
+
 - P1.1 deps: add `reze-js`, `@rezejs/vite-plugin`, `@rezejs/testing-library`, `@rebase-ui/reze`; remove `solid-js`, `@solidjs/*`, `@rebase-ui/solid`, `eslint-plugin-solid`, `eslint`, `@testing-library/jest-dom`
 - P1.2 `pnpm patch @rebase-ui/reze` (const ref); record in `pnpm-workspace.yaml`/AGENTS
 - P1.3 `vite.config.ts` (reze plugin, `~` alias, sass, base `./`, build target, define `__REZE_HTML__/__REZE_HYDRATE__` for vitest), `tsconfig.json` (jsx preserve, jsxImportSource reze-js), `index.html` (old `Document.tsx` head moved), `src/main.tsx`
@@ -102,6 +104,7 @@ Order of precedence: these rules, then the idiom map, then the Reze docs (`/medi
 - P1.5 build script: drop `rimraf dist/client/.vite` if not emitted; output stays `dist/client`; CI workflow paths
 
 ### P2 Reactive core (non-UI `src/lib`, `src/context`, `src/hooks` logic)
+
 - P2.1 i18n: `locale.ts`, `plugin-dict.ts`, `index.ts` (`t` reads `locale`)
 - P2.2 registries with `revision` signals: `lib/nodes/registry.ts`, `lib/ui/registry.ts`, `lib/pipeline/hooks.ts`, `lib/plugins/store.ts` (drop the deferred-write workaround: reads are immediate now)
 - P2.3 `lib/ws/endpoint.ts`, `lib/run-client.ts`, `lib/model-db.ts`, `lib/presets.ts`, `lib/favicon-status.ts`
@@ -110,22 +113,26 @@ Order of precedence: these rules, then the idiom map, then the Reze docs (`/medi
 - P2.6 tests ported: i18n, registry, hooks(pipeline), ws, run-client, run-endpoint, run-format, reducer, store, drag-*
 
 ### P3 UI kit (`src/components/ui/*`)
+
 - P3.1 Button, Input, Label, Icon, Switch (`@rebase-ui/reze/switch`), Slider, Tabs (`@rebase-ui/reze/tabs` + overflow fit), Select, Combobox, SearchMenu, menu-position, dismiss-on-outside
 - P3.2 `Errored`, `Slot`, `overridable`, `Crash`
 
 ### P4 Features
+
 - P4.1 node-card, nodes-list, add-node-menu, node-swap, stack-toolbar
 - P4.2 node forms (`shared.tsx`, 10 forms), noise chart
 - P4.3 config-panel + tabs (code, run, presets, instructions, settings, plugins), diagnostic-list
 - P4.4 workspace + App + watchdog decision (obsolete halt detection; keep a plain `window.onerror` overlay + plugin crash-boot flag recovery)
 
 ### P5 Plugin system
+
 - P5.1 `sdk/`: `definePlugin`, `relinePlugin` (externalise `reze-js` + `reze-js/internal/*` to `globalThis.__RELINE__`, Reze compiler on plugin sources), `gen-host-exports` for Reze, bump `PLUGIN_API_VERSION`, loader refuses old-API plugins with a clear reason
 - P5.2 `lib/plugins/{api,runtime,loader,bundled}.ts`, `worker-host.ts` (no UI, unchanged contract)
 - P5.3 `examples/sequence` ported + contract test, `writer-suffix` re-pinned, `pnpm plugin:build`, catalog regenerated
 - P5.4 `docs/PLUGINS.*`, `.omp/skills/reline-plugin-author`
 
 ### P6 Verification
+
 - P6.1 gates: lint, typecheck, test (counts ≥ baseline), build (+ chunk size vs baseline)
 - P6.2 parity harness vs baseline worktree: zero unexplained diffs
 - P6.3 console: zero warn/error at idle and through every flow; compiler diagnostics (`jsonl`) reviewed: no `SIGNAL_READ_ONCE`, `PROPS_DESTRUCTURED`, `INLINE_EACH`, `KEY_ON_ELEMENT`, `UNKNOWN_ATTRIBUTE`
@@ -133,20 +140,22 @@ Order of precedence: these rules, then the idiom map, then the Reze docs (`/medi
 - P6.5 memory/perf: 500-node stack render, selection click cost, no remount on option edit
 
 ### P7 Docs/skills/CI
+
 - P7.1 README(en/ru), AGENTS.md, `.omp/skills/reline-web` rewritten for Reze, new `reze-patterns` skill, `.github/workflows`
 - P7.2 delete leftovers: `solid` in comments, `Document.tsx`, watchdog remnants, `sdk/host-exports.json` regenerated
 
 ## Invariant → proof table (P0.4)
+
 (filled while porting; each row names the test or parity step that covers it)
 
-| Invariant (from skill) | Proof |
-|---|---|
-| uid is the only identity; survivors never cloned | `reducer.test.ts` |
-| option edit keeps card DOM + focus | parity: type in a field, same node element |
-| selection click recomputes 2 rows | perf probe P6.5 |
-| unknown node types kept verbatim | `registry.test.ts`, `node-shape.test.ts` |
-| plugin boot crash flag recovery | `plugins.test.ts` + parity crash flow |
-| tabs overflow burger | `tabs/fit` test + parity geometry |
-| code overlay alignment (scrollHeight/clientWidth) | parity geometry |
-| phone layout 390/320/landscape | parity geometry |
-| i18n flip rerenders everything | `i18n.test.ts` + parity |
+| Invariant (from skill)                            | Proof                                      |
+| ------------------------------------------------- | ------------------------------------------ |
+| uid is the only identity; survivors never cloned  | `reducer.test.ts`                          |
+| option edit keeps card DOM + focus                | parity: type in a field, same node element |
+| selection click recomputes 2 rows                 | perf probe P6.5                            |
+| unknown node types kept verbatim                  | `registry.test.ts`, `node-shape.test.ts`   |
+| plugin boot crash flag recovery                   | `plugins.test.ts` + parity crash flow      |
+| tabs overflow burger                              | `tabs/fit` test + parity geometry          |
+| code overlay alignment (scrollHeight/clientWidth) | parity geometry                            |
+| phone layout 390/320/landscape                    | parity geometry                            |
+| i18n flip rerenders everything                    | `i18n.test.ts` + parity                    |
