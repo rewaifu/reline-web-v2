@@ -10,7 +10,7 @@ import { effect, onCleanup, untrack } from "reze-js";
 
 export type MenuPlacement = "bottom-start" | "bottom-end" | "top-start";
 
-/** Portaled menu positioning (replaces the Kobalte popper): fixed under the
+/** Portaled menu positioning: fixed under the
  * anchor with a 4px gutter, flipping to the other side when there is no
  * room. The content keeps `position: fixed` from its stylesheet; coordinates
  * and `--menu-available-height` land inline. Stays hidden until the first

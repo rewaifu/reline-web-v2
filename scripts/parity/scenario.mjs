@@ -46,7 +46,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, Math.min(ms, 600)));
 
 // ---- page-side functions (self-contained: they are serialised into the page) ----
 
-// Kobalte-compatible press: pointerdown + pointerup + click, or a plain click.
+// Press that Base UI controls accept: pointerdown + pointerup + click, or a plain click.
 // Filters: sel, card (index into section[data-node-id]), any (aria-label or
 // exact text), text, startsWith, firstLine, label, visible, index, mode.
 const PRESS = (d) => {

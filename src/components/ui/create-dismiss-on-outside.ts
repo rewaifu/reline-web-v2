@@ -1,9 +1,8 @@
 import { effect, onCleanup, untrack } from "reze-js";
 
 /**
- * Kobalte's dismissable layer does not close the listbox on outside
- * interaction — close it ourselves: any pointer down that lands outside the
- * trigger block and the portaled content, plus Escape.
+ * Closes a listbox on outside interaction: any pointer down that lands outside
+ * the trigger block and the portaled content, plus Escape.
  *
  * Shared by UiSelect and UiCombobox (the two listbox-style controls).
  */
