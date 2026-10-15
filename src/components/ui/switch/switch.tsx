@@ -33,6 +33,8 @@ export const UiSwitch: Component<UiSwitchProps> = (props) => {
         checked={props.checked}
         onCheckedChange={(checked) => props.onChange(checked)}
         id={props.id}
+        // the hidden form input would otherwise render the string "undefined"
+        value=""
         aria-label={props.ariaLabel}
         {...rest}
       >
