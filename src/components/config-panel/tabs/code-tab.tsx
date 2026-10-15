@@ -1,6 +1,5 @@
 import { computed, effect, Show, signal, useContext } from "reze-js";
-import { parse, render } from "sugar-high/core";
-import * as json from "sugar-high/lang/json";
+import { highlightJson } from "~/lib/highlight-json";
 import { AnalysisContext, NodesDispatchContext } from "~/context/contexts";
 import { NodesActionType } from "~/types/actions";
 import type { Component } from "~/types/component";
@@ -13,12 +12,13 @@ import { Icon, UiSelect } from "~/components/ui";
 import styles from "../config-panel.module.scss";
 
 /** Pipeline JSON, tokenized by sugar-high's JSON grammar (lang entry only —
- * the full registry would pull in every language for one format). */
+ * the full registry would pull in every language for one format) and rendered
+ * as lean markup by `highlightJson`. */
 const HighlightedJson: Component<{ code: string }> = (props) => {
-  const html = computed(render(parse(props.code, json)));
+  const html = computed(highlightJson(props.code));
   return (
     <pre class={styles.codeView}>
-      {/* sugar-high escapes the source (`<` → `&lt;`) and the input is our
+      {/* `highlightJson` escapes the source (`<` → `&lt;`) and the input is our
        * own pretty-printed config, so the generated markup is safe here. */}
       <code innerHTML={html} />
     </pre>

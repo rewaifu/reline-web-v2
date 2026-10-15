@@ -48,7 +48,7 @@ The migration record is `docs/reze-migration.md` (findings F1–F7).
 - A component runs once; reads in JSX/handlers are live, reads in the body are one-shot (`SIGNAL_READ_ONCE`).
   Never destructure props (`PROPS_DESTRUCTURED`); read `props.x` where used. `splitProps(props, ["a", "b"])`
   (typed) for `rest`; `omitProps`/`mergeProps` return an untyped `Props`.
-- Types: `Component`/`ParentProps` from `~/types/component`; `JSX`, `PropsOf<"button">` from `reze-js`.
+- Types: `Component` from `~/types/component`; `JSX`, `PropsOf<"button">` from `reze-js`.
 - `class` takes a string, object or array. `attr:role` for `role` (the compiler flags plain `role` as unknown, F6).
   Events are camel-case; `on:name` for custom ones; `[handler, data]` passes data.
 - **`@rebase-ui/reze` components read `props.children` once.** A reactive single-expression child freezes — wrap

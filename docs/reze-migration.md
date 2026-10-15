@@ -71,7 +71,7 @@ Order of precedence: these rules, then the idiom map, then the Reze docs (`/medi
 - **R7 tests**: `@rezejs/testing-library` (`mount`, `cleanup`, `tick`, `settle`, `fire`); `afterEach(cleanup)`; DOM
   queried with `el.querySelector`. Signal writes are visible at once; DOM/effects need `tick()` (= `flush`). Keep every
   assertion; only the harness changes. A test file must not rely on another test having run first.
-- **R8 types**: `Component`/`ParentProps` from `~/types/component`; `JSX` from `reze-js`; `Accessor<T>` → `() => T`.
+- **R8 types**: `Component` from `~/types/component`; `JSX` from `reze-js`; `Accessor<T>` → `() => T`.
 - **R9 lists**: `<For each={…}>` identity mode (default) for stored arrays of objects (uid identity); never `.map` for
   stateful rows. `class` takes strings/objects/arrays (no `classList`). Events are camel-case (`onClick`, `onInput`,
   `onKeyDown`, `onPointerDown`); custom ones `on:name`.

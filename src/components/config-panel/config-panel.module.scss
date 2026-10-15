@@ -112,13 +112,35 @@
   flex: 1;
   text-align: left;
 
-  // sugar-high paints each token with an inline `color: var(--sh-…)`, so the
-  // syntax palette is defined here rather than in per-token classes.
+  // `highlightJson` marks painted tokens with `sh__token--<kind>` classes; the
+  // syntax palette is defined here.
   --sh-property: #a3be8c;
   --sh-string: #bf616a;
   --sh-class: #d08770;
   --sh-keyword: #ebcb8b;
   --sh-sign: var(--color-text-muted);
+
+  :global {
+    .sh__token--property {
+      color: var(--sh-property);
+    }
+
+    .sh__token--string {
+      color: var(--sh-string);
+    }
+
+    .sh__token--class {
+      color: var(--sh-class);
+    }
+
+    .sh__token--keyword {
+      color: var(--sh-keyword);
+    }
+
+    .sh__token--sign {
+      color: var(--sh-sign);
+    }
+  }
 }
 
 // The editor scrolls as a whole: the field is stretched to its content, so

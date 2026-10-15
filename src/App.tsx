@@ -137,6 +137,7 @@ export const App: Component = () => {
       <NodesDispatchContext value={dispatch}>
         <AnalysisContext value={() => analysis}>
           <main>
+            <h1 class="visually-hidden">reline-web</h1>
             {/* An uncaught error in the workspace is shown in place of it, and
               the rest of the page (the boundary's fallback) stays usable. */}
             <Errored

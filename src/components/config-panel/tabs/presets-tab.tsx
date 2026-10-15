@@ -44,6 +44,7 @@ export const PresetsTab: Component = () => {
         <input
           class={styles.presetNameInput}
           placeholder={t("panel.presets.namePlaceholder")}
+          aria-label={t("panel.presets.namePlaceholder")}
           value={name}
           onInput={(e) => (name = e.currentTarget.value)}
           onKeyDown={(e) => e.key === "Enter" && saveCurrent()}
