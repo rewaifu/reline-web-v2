@@ -1,4 +1,3 @@
-import { For } from "reze-js";
 import type { Component } from "~/types/component";
 
 /** Inline copies of Tabler (https://tabler.io/icons) outline paths —
@@ -77,6 +76,12 @@ const PATHS = {
 
 export type IconName = keyof typeof PATHS;
 
+/** One `d` per icon: the sub-paths share the stroke, so a single `<path>`
+ * paints the same picture with a fraction of the elements. */
+const OUTLINES = Object.fromEntries(
+  Object.entries(PATHS).map(([name, paths]) => [name, paths.join(" ")]),
+) as Record<IconName, string>;
+
 export interface IconProps {
   name: IconName;
   size?: number;
@@ -94,6 +99,6 @@ export const Icon: Component<IconProps> = (props) => (
     stroke-linejoin="round"
     aria-hidden="true"
   >
-    <For each={PATHS[props.name]}>{(d) => <path d={d} />}</For>
+    <path d={OUTLINES[props.name]} />
   </svg>
 );
