@@ -23,6 +23,9 @@ const InstalledSchema = v.object({
   updatedAt: v.number(),
   /** Set when the host switched the plugin off, not the user. */
   disabledReason: v.optional(v.picklist(["crash", "error"])),
+  /** Shipped with this deployment (`plugins/bundled.json`): installed and kept
+   * current by the host at every start, not removable, all caps granted. */
+  bundled: v.optional(v.boolean()),
 });
 
 export type InstalledPlugin = v.InferOutput<typeof InstalledSchema>;

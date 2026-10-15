@@ -5,11 +5,13 @@ import * as v from "valibot";
 import { storage } from "~/lib/storage";
 import { pipeline } from "~/lib/pipeline/hooks";
 import { createPluginApi } from "./api";
+import { syncBundled, type BundledFailure } from "./bundled";
 import {
   PluginLoadError,
   fetchEntry,
   fetchManifest,
   isLoopback,
+  messageOf,
   sha384,
   type ManifestCandidate,
 } from "./loader";
@@ -72,6 +74,9 @@ const [bootInfo, setBootInfo] = createSignal<{
   /** Plugins switched off because the previous start did not come up healthy. */
   crashed: readonly string[];
 }>({ safeMode: false, crashed: [] }, { ownedWrite: true });
+const [bundleFailures, setBundleFailures] = createSignal<
+  readonly BundledFailure[]
+>([], { ownedWrite: true });
 const [pendingInstall, setPendingInstall] = createSignal<string | undefined>(
   undefined,
   { ownedWrite: true },
@@ -112,9 +117,6 @@ interface Running {
   dispose: Dispose;
 }
 const running = new Map<string, Running>();
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
 
 const withTimeout = <T>(
   work: Promise<T>,
@@ -299,6 +301,9 @@ export const pluginRuntime = {
   /** `?plugins=off` and plugins switched off after a failed start. Reactive. */
   boot: bootInfo,
 
+  /** What of the deployment's bundled plugins could not be read at start. */
+  bundleFailures,
+
   /** A manifest URL from `?plugin=` that waits for the user to look at it. */
   pendingInstall,
 
@@ -381,6 +386,8 @@ export const pluginRuntime = {
   },
 
   remove(id: string): void {
+    // a bundled plugin would be installed again at the next start
+    if (pluginStore.get(id)?.bundled === true) return;
     deactivate(id);
     pluginStore.remove(id);
     setStatuses((all) => {
@@ -390,8 +397,9 @@ export const pluginRuntime = {
     });
   },
 
-  /** Start the enabled plugins. Honours safe mode, repairs a start that never
-   * came up, and reads a `?plugin=` link. */
+  /** Start the enabled plugins. Honours safe mode, installs the deployment's
+   * bundled plugins, repairs a start that never came up, and reads a
+   * `?plugin=` link. */
   async start(): Promise<void> {
     const params = new URLSearchParams(window.location.search);
     const link = params.get("plugin");
@@ -410,6 +418,8 @@ export const pluginRuntime = {
       setBootInfo({ safeMode: true, crashed: [] });
       return;
     }
+    // the deployment's own plugins, before the enabled ones are picked
+    setBundleFailures(await syncBundled());
     // the previous start wrote this and never cleared it: the page died or
     // froze before it proved itself healthy, so what was starting is suspect
     const previous = storage.getJson(BOOT_KEY);

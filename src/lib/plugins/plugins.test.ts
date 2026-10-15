@@ -1052,3 +1052,187 @@ describe("the sandboxed (worker) tier", () => {
     });
   });
 });
+
+describe("plugins bundled with the deployment", () => {
+  const shipped = () => `${window.location.origin}/plugins/bundled`;
+  const ship = async (w: World, f: Fixture) => {
+    await publish(w, f, shipped());
+    return `bundled/${f.id}/plugin.json`;
+  };
+  const list = (...plugins: string[]) =>
+    files.set(
+      `${window.location.origin}/plugins/bundled.json`,
+      JSON.stringify({ schema: 1, plugins }),
+    );
+  const entryFetches = () =>
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(([url]) =>
+        (url as URL | string).toString().endsWith("/index.js"),
+      ).length;
+
+  it("installs what the list names with every capability it asks for, and runs it", async () => {
+    const w = await fresh();
+    let ran = 0;
+    list(
+      await ship(w, {
+        id: "acme.shell",
+        caps: ["ui", "store"],
+        code: "// shell",
+        activate: () => {
+          ran += 1;
+        },
+      }),
+    );
+    await w.pluginRuntime.start();
+    flush();
+    expect(ran).toBe(1);
+    expect(w.pluginRuntime.status("acme.shell").state).toBe("active");
+    expect(w.pluginStore.get("acme.shell")).toMatchObject({
+      bundled: true,
+      enabled: true,
+      grantedCaps: ["ui", "store"],
+    });
+    expect(w.pluginStore.cachedCode("acme.shell")).toBe("// shell");
+  });
+
+  it("a deployment without a list is not an error", async () => {
+    const w = await fresh();
+    await w.pluginRuntime.start();
+    flush();
+    expect(w.pluginRuntime.bundleFailures()).toEqual([]);
+    expect(w.pluginStore.list()).toHaveLength(0);
+  });
+
+  it("an unchanged plugin is not fetched again; a new version replaces it and keeps it off if it was off", async () => {
+    let w = await fresh();
+    const fixture: Fixture = {
+      id: "acme.keep",
+      caps: [],
+      code: "// v1",
+      activate: () => {},
+    };
+    list(await ship(w, fixture));
+    await w.pluginRuntime.start();
+    flush();
+    expect(entryFetches()).toBe(1);
+    w.pluginRuntime.disable("acme.keep");
+    flush();
+
+    w = await fresh();
+    await w.pluginRuntime.start();
+    expect(entryFetches()).toBe(1);
+
+    w = await fresh();
+    await ship(w, { ...fixture, version: "1.1.0", code: "// v2" });
+    await w.pluginRuntime.start();
+    flush();
+    expect(entryFetches()).toBe(2);
+    expect(w.pluginStore.get("acme.keep")).toMatchObject({
+      enabled: false,
+      bundled: true,
+      manifest: { version: "1.1.0" },
+    });
+    expect(w.pluginStore.cachedCode("acme.keep")).toBe("// v2");
+  });
+
+  it("cannot be removed, and goes away when the list drops it", async () => {
+    let w = await fresh();
+    list(
+      await ship(w, {
+        id: "acme.fixed",
+        caps: [],
+        code: "// fixed",
+        activate: () => {},
+      }),
+    );
+    await w.pluginRuntime.start();
+    w.pluginRuntime.remove("acme.fixed");
+    flush();
+    expect(w.pluginStore.get("acme.fixed")).toBeDefined();
+
+    w = await fresh();
+    list();
+    await w.pluginRuntime.start();
+    flush();
+    expect(w.pluginStore.get("acme.fixed")).toBeUndefined();
+    expect(w.pluginStore.cachedCode("acme.fixed")).toBeUndefined();
+  });
+
+  it("leaves a plugin the user installed under the same id alone", async () => {
+    let w = await fresh();
+    await install(w, {
+      id: "acme.mine",
+      caps: [],
+      code: "// mine",
+      activate: () => {},
+    });
+    w = await fresh();
+    list(
+      await ship(w, {
+        id: "acme.mine",
+        caps: ["ui"],
+        code: "// theirs",
+        activate: () => {},
+      }),
+    );
+    await w.pluginRuntime.start();
+    flush();
+    expect(w.pluginStore.get("acme.mine")).toMatchObject({
+      grantedCaps: [],
+      integrity: await w.sha384("// mine"),
+    });
+    expect(w.pluginStore.get("acme.mine")?.bundled).toBeUndefined();
+  });
+
+  it("reports what it cannot read, keeps the rest, and drops nothing then", async () => {
+    let w = await fresh();
+    list(
+      await ship(w, {
+        id: "acme.good",
+        caps: [],
+        code: "// good",
+        activate: () => {},
+      }),
+    );
+    await w.pluginRuntime.start();
+    w.pluginRuntime.confirmHealthy();
+
+    w = await fresh();
+    list(
+      "bundled/acme.good/plugin.json",
+      "bundled/acme.gone/plugin.json",
+      "https://elsewhere.example/x/plugin.json",
+    );
+    await w.pluginRuntime.start();
+    flush();
+    expect(w.pluginRuntime.bundleFailures()).toHaveLength(2);
+    expect(w.pluginRuntime.bundleFailures()[1].detail).toContain("own site");
+    expect(w.pluginRuntime.status("acme.good").state).toBe("active");
+  });
+
+  it("a list that is not valid is one failure", async () => {
+    const w = await fresh();
+    files.set(
+      `${window.location.origin}/plugins/bundled.json`,
+      JSON.stringify({ schema: 2, plugins: [] }),
+    );
+    await w.pluginRuntime.start();
+    expect(w.pluginRuntime.bundleFailures()).toHaveLength(1);
+  });
+
+  it("safe mode installs nothing", async () => {
+    const w = await fresh();
+    list(
+      await ship(w, {
+        id: "acme.safe2",
+        caps: [],
+        code: "// s",
+        activate: () => {},
+      }),
+    );
+    setLocation("?plugins=off");
+    await w.pluginRuntime.start();
+    expect(w.pluginStore.list()).toHaveLength(0);
+  });
+});

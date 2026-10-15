@@ -49,6 +49,7 @@ export const ru = {
       remove: "Удалить",
       removeAria: "Удалить плагин {name}",
       log: "Журнал",
+      bundled: "встроен",
     },
     state: {
       off: "выключен",
@@ -59,6 +60,7 @@ export const ru = {
     crashDisabled: "Выключен после сбоя запуска",
     safeMode: "Безопасный режим: плагины не загружены (?plugins=off).",
     crashed: "После сбоя запуска выключены: {ids}",
+    bundleFailed: "Встроенный плагин не установлен: {detail}",
     failures: "Сбои хуков и компонентов",
     error: {
       network: "Не удалось загрузить: {detail}",
@@ -130,6 +132,7 @@ export const en: typeof ru = {
       remove: "Remove",
       removeAria: "Remove plugin {name}",
       log: "Log",
+      bundled: "built-in",
     },
     state: {
       off: "off",
@@ -140,6 +143,7 @@ export const en: typeof ru = {
     crashDisabled: "Switched off after a failed start",
     safeMode: "Safe mode: no plugins were loaded (?plugins=off).",
     crashed: "Switched off after a failed start: {ids}",
+    bundleFailed: "A built-in plugin was not installed: {detail}",
     failures: "Hook and component failures",
     error: {
       network: "Could not load: {detail}",

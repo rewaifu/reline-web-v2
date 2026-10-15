@@ -301,6 +301,38 @@ and run inside a `memo`, which cannot wait for a message.
   optional). An update is a new `version` and a new hash; the editor shows an update card and
   highlights the **new** permissions.
 
+## Bundling plugins into a deployment (Tauri, company builds)
+
+A deployer can ship plugins preinstalled instead of asking each user to install them. After `pnpm build`:
+
+```bash
+pnpm plugin:bundle dist/client ../my-plugin/dist public/plugins/sequence
+```
+
+Each directory holds a pinned `plugin.json` and its entry (a `vite build` output with `relinePlugin()`, or
+`pnpm plugin:pin`); the script refuses a pin that does not match the code. It copies them to
+`<site>/plugins/bundled/<id>/` and rewrites `<site>/plugins/bundled.json`, which names exactly the directories given.
+
+At every start the host reads that list and installs what it names, with every capability the manifest asks for
+(the deployer's consent replaces the consent card), refreshes a plugin whose version or code changed, and removes one the list
+dropped. The user can switch a bundled plugin off (it stays off through updates) but not remove it; it shows a
+"built-in" chip. A plugin the user installed by hand under the same id is left alone. `?plugins=off` installs nothing.
+A list or manifest that cannot be read is reported in the Plugins tab and the other plugins still start.
+
+Bundled files are trusted as the app's own: they are fetched from the page's own scheme and host only (so `tauri://localhost`
+and `http://tauri.localhost` work), without the `https`/pin rules of a link install. Tauri:
+
+```json
+{
+  "build": {
+    "frontendDist": "../dist/client",
+    "beforeBuildCommand": "pnpm build && pnpm plugin:bundle dist/client ../my-plugin/dist"
+  }
+}
+```
+
+A page-tier plugin runs from a Blob, so a CSP you set in `tauri.conf.json` must allow `script-src blob:`.
+
 ## Getting into the catalog
 
 The catalog is `public/plugins/index.json` in the editor repository, and it is not maintained by hand.

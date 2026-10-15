@@ -6,12 +6,18 @@ import { PluginManifestSchema, type PluginManifest } from "./manifest";
  * a message; `message` is for the log. */
 export class PluginLoadError extends Error {
   readonly kind: "network" | "manifest" | "integrity" | "policy" | "size";
-  constructor(kind: PluginLoadError["kind"], message: string) {
+  /** The HTTP status, when the server answered with an error. */
+  readonly status?: number;
+  constructor(kind: PluginLoadError["kind"], message: string, status?: number) {
     super(message);
     this.name = "PluginLoadError";
     this.kind = kind;
+    this.status = status;
   }
 }
+
+export const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 export const MAX_MANIFEST_BYTES = 64 * 1024;
 const MAX_ENTRY_BYTES = 1024 * 1024;
@@ -78,15 +84,13 @@ export const fetchText = async (url: URL, limit: number): Promise<string> => {
       redirect: "follow",
     });
   } catch (error) {
-    throw new PluginLoadError(
-      "network",
-      `${url.href}: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new PluginLoadError("network", `${url.href}: ${messageOf(error)}`);
   }
   if (!response.ok)
     throw new PluginLoadError(
       "network",
       `${url.href}: HTTP ${response.status}`,
+      response.status,
     );
   const declared = Number(response.headers.get("content-length") ?? 0);
   if (declared > limit)
@@ -110,19 +114,40 @@ export interface ManifestCandidate {
   entryUrl: string;
 }
 
+/** Same scheme and host. `URL.origin` is the string "null" for a custom scheme
+ * such as `tauri://localhost`, so two such URLs cannot be compared by it. */
+const sameSite = (a: URL, b: URL): boolean =>
+  a.protocol === b.protocol && a.host === b.host;
+
 /** Fetch and check a manifest. `input` may be relative to the page. Nothing of
- * the plugin runs, and the entry is not fetched yet. */
+ * the plugin runs, and the entry is not fetched yet.
+ *
+ * `shipped`: the plugin is a file of this very deployment (see `bundled.ts`),
+ * so the deployer vouches for it. The scheme and pin rules do not apply — a
+ * desktop shell serves its assets from `tauri://localhost` — but both files
+ * must come from the page's own site and nothing else is trusted. */
 export const fetchManifest = async (
   input: string,
   base: string = window.location.href,
+  options: { shipped?: boolean } = {},
 ): Promise<ManifestCandidate> => {
+  const shipped = options.shipped === true;
+  const page = new URL(window.location.href);
+  const check = (url: URL): void => {
+    if (!shipped) return checkUrl(url);
+    if (!sameSite(url, page))
+      throw new PluginLoadError(
+        "policy",
+        `${url.href} is not on this deployment's own site`,
+      );
+  };
   let manifestUrl: URL;
   try {
     manifestUrl = new URL(input.trim(), base);
   } catch {
     throw new PluginLoadError("manifest", "not a URL");
   }
-  checkUrl(manifestUrl);
+  check(manifestUrl);
   const text = await fetchText(manifestUrl, MAX_MANIFEST_BYTES);
   let json: unknown;
   try {
@@ -145,7 +170,7 @@ export const fetchManifest = async (
   } catch {
     throw new PluginLoadError("manifest", "entry is not a URL");
   }
-  checkUrl(entryUrl);
+  check(entryUrl);
   // the origin is what the user is asked to trust: code from somewhere else is
   // accepted only when the manifest pins exactly its bytes
   if (
@@ -156,7 +181,7 @@ export const fetchManifest = async (
       "policy",
       "an entry on another origin must be pinned with integrity",
     );
-  if (manifest.integrity === undefined && !isLoopback(manifestUrl))
+  if (!shipped && manifest.integrity === undefined && !isLoopback(manifestUrl))
     throw new PluginLoadError(
       "policy",
       "the manifest must pin the entry with integrity",

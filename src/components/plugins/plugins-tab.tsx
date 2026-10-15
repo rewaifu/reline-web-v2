@@ -188,17 +188,19 @@ const PluginRow: Component<{
             name: props.plugin.manifest.name,
           })}
         />
-        <button
-          type="button"
-          class={styles.iconBtn}
-          aria-label={t("plugins.list.removeAria", {
-            name: props.plugin.manifest.name,
-          })}
-          title={t("plugins.list.remove")}
-          onClick={() => pluginRuntime.remove(props.plugin.manifest.id)}
-        >
-          <Icon name="trash" size={13} />
-        </button>
+        <Show when={props.plugin.bundled !== true}>
+          <button
+            type="button"
+            class={styles.iconBtn}
+            aria-label={t("plugins.list.removeAria", {
+              name: props.plugin.manifest.name,
+            })}
+            title={t("plugins.list.remove")}
+            onClick={() => pluginRuntime.remove(props.plugin.manifest.id)}
+          >
+            <Icon name="trash" size={13} />
+          </button>
+        </Show>
       </div>
       <p class={styles.muted}>
         {props.plugin.manifest.id} · {origin()}
@@ -213,6 +215,9 @@ const PluginRow: Component<{
         {(text) => <p class={styles.err}>{text()}</p>}
       </Show>
       <p class={styles.chips}>
+        <Show when={props.plugin.bundled === true}>
+          <span class={styles.chip}>{t("plugins.list.bundled")}</span>
+        </Show>
         <Show when={props.plugin.manifest.sandbox === "worker"}>
           <span class={styles.chip}>worker</span>
         </Show>
@@ -230,13 +235,15 @@ const PluginRow: Component<{
           <For each={lines()}>{(line) => <p>{line.text}</p>}</For>
         </details>
       </Show>
-      <button
-        type="button"
-        class={styles.link}
-        onClick={() => props.onUpdate(props.plugin.manifestUrl)}
-      >
-        {t("plugins.list.update")}
-      </button>
+      <Show when={props.plugin.bundled !== true}>
+        <button
+          type="button"
+          class={styles.link}
+          onClick={() => props.onUpdate(props.plugin.manifestUrl)}
+        >
+          {t("plugins.list.update")}
+        </button>
+      </Show>
     </li>
   );
 };
@@ -443,6 +450,13 @@ export const PluginsTab: Component = () => {
           })}
         </p>
       </Show>
+      <For each={pluginRuntime.bundleFailures()}>
+        {(failure) => (
+          <p class={styles.err}>
+            {t("plugins.bundleFailed", { detail: failure.detail })}
+          </p>
+        )}
+      </For>
 
       <form
         class={styles.install}

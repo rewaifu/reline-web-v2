@@ -47,19 +47,20 @@ http://localhost:3000/?api=ws://127.0.0.1:8000/run
 
 ### Команды
 
-| Команда               | Что делает                                                            |
-| --------------------- | --------------------------------------------------------------------- |
-| `pnpm dev`            | dev-сервер Vite на порту 3000                                         |
-| `pnpm build`          | статический сайт в `dist/client` (относительные пути: любой хостинг)  |
-| `pnpm serve`          | локально отдать production-сборку                                     |
-| `pnpm lint`           | `oxlint --type-aware --type-check` (правила Solid включены)           |
-| `pnpm typecheck`      | `tsc --noEmit`                                                        |
-| `pnpm test`           | Vitest (jsdom)                                                        |
-| `pnpm format`         | `oxfmt`                                                               |
-| `pnpm plugin:build`   | собрать плагин Config sequence и обновить каталог плагинов            |
-| `pnpm plugin:pin`     | опубликовать пример плагина без сборки в `public/plugins/examples/`   |
-| `pnpm plugin:catalog` | пересобрать `public/plugins/index.json`                               |
-| `pnpm sdk:exports`    | пересоздать список экспортов Solid, на который опирается SDK плагинов |
+| Команда               | Что делает                                                             |
+| --------------------- | ---------------------------------------------------------------------- |
+| `pnpm dev`            | dev-сервер Vite на порту 3000                                          |
+| `pnpm build`          | статический сайт в `dist/client` (относительные пути: любой хостинг)   |
+| `pnpm serve`          | локально отдать production-сборку                                      |
+| `pnpm lint`           | `oxlint --type-aware --type-check` (правила Solid включены)            |
+| `pnpm typecheck`      | `tsc --noEmit`                                                         |
+| `pnpm test`           | Vitest (jsdom)                                                         |
+| `pnpm format`         | `oxfmt`                                                                |
+| `pnpm plugin:build`   | собрать плагин Config sequence и обновить каталог плагинов             |
+| `pnpm plugin:pin`     | опубликовать пример плагина без сборки в `public/plugins/examples/`    |
+| `pnpm plugin:bundle`  | встроить плагины в готовую сборку (ставятся сразу, docs/PLUGINS.ru.md) |
+| `pnpm plugin:catalog` | пересобрать `public/plugins/index.json`                                |
+| `pnpm sdk:exports`    | пересоздать список экспортов Solid, на который опирается SDK плагинов  |
 
 Прежде чем считать правку готовой, запустите `pnpm lint`, `pnpm typecheck`, `pnpm test` и
 `pnpm build`.

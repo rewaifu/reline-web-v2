@@ -36,6 +36,7 @@ pnpm build               # static site into dist/client
 pnpm format              # oxfmt (ignores public/plugins/** and sdk/host-exports.json)
 pnpm plugin:build        # build examples/sequence and regenerate public/plugins/index.json
 pnpm plugin:pin          # publish examples/writer-suffix to public/plugins/examples/
+pnpm plugin:bundle <site> <plugin-dir>...   # embed plugins into a built site (Tauri, company builds)
 pnpm plugin:catalog      # regenerate the catalog only
 pnpm sdk:exports         # regenerate sdk/host-exports.json after a Solid update
 ```

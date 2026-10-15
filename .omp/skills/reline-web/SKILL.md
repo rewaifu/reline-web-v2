@@ -132,6 +132,11 @@ sight. Pieces:
   throwing reducer/hook is recorded (`pipeline.report`), never propagated. `StackNode.ext` (per plugin id)
   travels as `meta.ext`. `bindStore` (called in `App`) lets non-component code reach the stack, and re-checks
   orphan nodes (`NORMALIZE`) when their type gets defined.
+- **Bundled plugins** (`bundled.ts`, `scripts/bundle-plugins.mjs`): a deployment (Tauri) lists plugins in `plugins/bundled.json`;
+  `start()` runs `syncBundled()` (after the safe-mode check, before the enabled list is picked): installs with all manifest caps,
+  `bundled: true`, refreshes on version/pin change, keeps a user's off/crash state, prunes dropped ones only after a fully clean read, leaves a
+  user's own same-id install alone. `fetchManifest(..., { shipped: true })` requires the page's own scheme+host (compare `protocol`+`host`;
+  `URL.origin` is `"null"` for `tauri://`) and skips https/pin rules. `remove()` refuses a bundled plugin.
 - Example plugins: `examples/sequence` (built with `relinePlugin()` → `public/plugins/sequence`, contract test
   `examples/sequence/sequence.test.tsx` runs the real source against the real API), `examples/writer-suffix`
   (worker tier, pinned by `scripts/pin-plugin.mjs` into `public/plugins/examples/` — **not in the catalog**). `public/plugins/**` is excluded from oxfmt/oxlint — the hash

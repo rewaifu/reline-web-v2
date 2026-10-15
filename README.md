@@ -47,19 +47,20 @@ http://localhost:3000/?api=ws://127.0.0.1:8000/run
 
 ### Scripts
 
-| Command               | What it does                                                      |
-| --------------------- | ----------------------------------------------------------------- |
-| `pnpm dev`            | Vite dev server on port 3000                                      |
-| `pnpm build`          | Static site into `dist/client` (relative paths: any static host)  |
-| `pnpm serve`          | Serve the production build locally                                |
-| `pnpm lint`           | `oxlint --type-aware --type-check` (Solid rules included)         |
-| `pnpm typecheck`      | `tsc --noEmit`                                                    |
-| `pnpm test`           | Vitest (jsdom)                                                    |
-| `pnpm format`         | `oxfmt`                                                           |
-| `pnpm plugin:build`   | Build the Config sequence plugin and refresh the plugin catalog   |
-| `pnpm plugin:pin`     | Publish the no-build example plugin to `public/plugins/examples/` |
-| `pnpm plugin:catalog` | Rebuild `public/plugins/index.json`                               |
-| `pnpm sdk:exports`    | Regenerate the Solid export list the plugin SDK relies on         |
+| Command               | What it does                                                           |
+| --------------------- | ---------------------------------------------------------------------- |
+| `pnpm dev`            | Vite dev server on port 3000                                           |
+| `pnpm build`          | Static site into `dist/client` (relative paths: any static host)       |
+| `pnpm serve`          | Serve the production build locally                                     |
+| `pnpm lint`           | `oxlint --type-aware --type-check` (Solid rules included)              |
+| `pnpm typecheck`      | `tsc --noEmit`                                                         |
+| `pnpm test`           | Vitest (jsdom)                                                         |
+| `pnpm format`         | `oxfmt`                                                                |
+| `pnpm plugin:build`   | Build the Config sequence plugin and refresh the plugin catalog        |
+| `pnpm plugin:pin`     | Publish the no-build example plugin to `public/plugins/examples/`      |
+| `pnpm plugin:bundle`  | Embed plugins into a built site (preinstalled, see docs/PLUGINS.en.md) |
+| `pnpm plugin:catalog` | Rebuild `public/plugins/index.json`                                    |
+| `pnpm sdk:exports`    | Regenerate the Solid export list the plugin SDK relies on              |
 
 Before calling a change done, run `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build`.
 
