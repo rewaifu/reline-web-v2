@@ -1,15 +1,15 @@
 {
   "id": "reline.sequence",
   "name": "Config sequence",
-  "version": "1.2.0",
-  "api": 1,
+  "version": "1.3.0",
+  "api": 2,
   "description": "Build a pipeline out of several configs and run them one after another.",
   "descriptions": {
     "ru": "Собирает пайплайн из нескольких конфигов и запускает их по очереди.",
     "en": "Build a pipeline out of several configs and run them one after another."
   },
   "entry": "sequence.js",
-  "integrity": "sha384-4QR7hnaCOAsP6sz1d3Jcxft+kjNAfl/4EGiKtpyGOB4ERWAFE3gmqksYJCxmyJnN",
+  "integrity": "sha384-Ex3BG4Nu6QTnC2gkUa6Q7qeQg7cw8XmpgCBv9La3LApXI9aTw0xpksBonczTNPQx",
   "caps": [
     "ui",
     "storage",

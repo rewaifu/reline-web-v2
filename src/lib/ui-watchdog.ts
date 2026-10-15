@@ -3,16 +3,17 @@ import styles from "./ui-watchdog.module.scss";
 
 /** Turns the one failure that leaves no trace into something on screen.
  *
- * Solid 2 halts the *whole* reactive system on an uncaught error, and an error
- * thrown inside an effect (the common case — a form computing on data it did
- * not expect) never reaches an error boundary, which only sees render errors.
- * The page then looks alive: it paints, it scrolls, and every input ignores the
- * keyboard. Nothing in the console is visible to the person using it.
+ * An error that escapes a scheduled rerun (one `catchError` does not cover) is
+ * rethrown out of `flush` and can leave the scheduler unable to finish its
+ * work. An error thrown inside an effect is the common case — a form computing
+ * on data it did not expect. The page then looks alive: it paints, it scrolls,
+ * and every input ignores the keyboard. Nothing in the console is visible to
+ * the person using it.
  *
  * A boundary cannot catch this, so it is *detected* instead. The probe is a
  * token: a signal is bumped on a timer and one hidden node renders it, and the
  * timers keep running when the scheduler is dead. A DOM that stops following
- * the beat for a few ticks is a halted reactive system, not a slow frame.
+ * the beat for a few ticks is a stalled scheduler, not a slow frame.
  */
 
 export interface WatchdogOptions {
@@ -105,7 +106,7 @@ export const createWatchdog = (options: WatchdogOptions): Watchdog => {
 };
 
 /** The last error the browser reported. A halt is caused by an error that was
- * thrown outside Solid's error handling, so this is the text worth showing
+ * thrown outside any `catchError`, so this is the text worth showing
  * next to "it stopped responding" — without it the report is unusable. */
 let lastError: string | undefined;
 

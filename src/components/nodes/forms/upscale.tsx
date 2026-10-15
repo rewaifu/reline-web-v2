@@ -1,5 +1,6 @@
 import type { StackNode } from "~/types/node";
-import { type Component, Show, createUniqueId } from "solid-js";
+import { Show, createUniqueId } from "reze-js";
+import type { Component } from "~/types/component";
 import { DType, TilerType } from "~/types/enums";
 import {
   useNodeForm,

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createRoot, createStore, flush, type Store } from "solid-js";
+import { store } from "reze-js";
+import { tick } from "@rezejs/testing-library";
 import { createNodesDispatch } from "~/context/reducer";
 import { NodesActionType } from "~/types/actions";
 import type { StackNode } from "~/types/node";
 import type { SharpNodeOptions } from "~/types/options";
 import { NodeType } from "~/types/enums";
+import type { AnyAction } from "~/types/actions";
 
 /**
  * Invariants of the uid-identity reducer: actions address nodes by uid,
@@ -31,22 +33,15 @@ const sharp = (n: StackNode) => n.options as SharpNodeOptions;
 
 const withStore = (
   fn: (ctx: {
-    nodes: Store<StackNode[]>;
-    dispatch: ReturnType<typeof createNodesDispatch>;
+    nodes: StackNode[];
+    dispatch: (action: AnyAction) => void;
   }) => void,
   seed?: StackNode[],
 ) => {
-  let ctx!: Parameters<typeof fn>[0];
-  let dispose!: () => void;
-  createRoot((d) => {
-    dispose = d;
-    const [nodes, setNodes] = createStore<StackNode[]>(
-      seed ?? [node("u1", -1), node("u2", -5)],
-    );
-    ctx = { nodes, dispatch: createNodesDispatch(setNodes) };
-  });
-  fn(ctx);
-  dispose();
+  const nodes = store<StackNode[]>(
+    seed ?? [node("u1", -1), node("u2", -5)],
+  );
+  fn({ nodes, dispatch: createNodesDispatch(nodes) });
 };
 
 describe("reducer: uid is the only identity", () => {
@@ -59,7 +54,7 @@ describe("reducer: uid is the only identity", () => {
         type: NodesActionType.CHANGE,
         payload: { uid: "u1", options: { diapason_black: -12 } },
       });
-      flush();
+      tick();
       seen.push(read());
       expect(seen).toEqual([-1, -12]);
       expect(sharp(nodes[1]).diapason_black).toBe(-5);
@@ -73,7 +68,7 @@ describe("reducer: uid is the only identity", () => {
         type: NodesActionType.CHANGE,
         payload: { uid: "nope", options: { diapason_black: 99 } },
       });
-      flush();
+      tick();
       expect(sharp(nodes[0]).diapason_black).toBe(-1);
     });
   });
@@ -82,7 +77,7 @@ describe("reducer: uid is the only identity", () => {
     withStore(({ nodes, dispatch }) => {
       const first = nodes[0];
       dispatch({ type: NodesActionType.DELETE, payload: "u2" });
-      flush();
+      tick();
       expect(nodes.length).toBe(1);
       expect(nodes[0]).toBe(first);
     });
@@ -92,7 +87,7 @@ describe("reducer: uid is the only identity", () => {
     withStore(({ nodes, dispatch }) => {
       const [first, second] = [nodes[0], nodes[1]];
       dispatch({ type: NodesActionType.MOVE, payload: { from: 0, to: 1 } });
-      flush();
+      tick();
       expect(nodes[0]).toBe(second);
       expect(nodes[1]).toBe(first);
     });
@@ -102,7 +97,7 @@ describe("reducer: uid is the only identity", () => {
     withStore(({ nodes, dispatch }) => {
       const added = node("u3", 3);
       dispatch({ type: NodesActionType.ADD, payload: added });
-      flush();
+      tick();
       expect(nodes.length).toBe(3);
       expect(nodes[2].uid).toBe("u3");
       expect(sharp(nodes[2]).diapason_black).toBe(3);
@@ -116,7 +111,7 @@ describe("reducer: uid is the only identity", () => {
         type: NodesActionType.IMPORT,
         payload: [node("u1", 1), node("u1", 2)],
       });
-      flush();
+      tick();
       expect(nodes.length).toBe(2);
       const uids = nodes.map((n) => n.uid);
       expect(new Set(uids).size).toBe(2);
@@ -133,7 +128,7 @@ describe("reducer: uid is the only identity", () => {
         type: NodesActionType.SWAP,
         payload: { uid: "u1", nodeType: NodeType.RESIZE },
       });
-      flush();
+      tick();
       expect(nodes.length).toBe(2);
       // uid, position and the survivor's reference survive the swap
       expect(nodes[0].uid).toBe("u1");
@@ -157,7 +152,7 @@ describe("reducer: uid is the only identity", () => {
           type: NodesActionType.SWAP,
           payload: { uid: "o1", nodeType: "acme.also-gone" },
         });
-        flush();
+        tick();
         // swapping to a type with no definition would invent options: no-op
         expect(nodes[0].type).toBe("acme.gone");
         expect(nodes[0].options).toEqual({ keep: "me" });
@@ -165,7 +160,7 @@ describe("reducer: uid is the only identity", () => {
           type: NodesActionType.SWAP,
           payload: { uid: "o1", nodeType: NodeType.LEVEL },
         });
-        flush();
+        tick();
         expect(nodes[0].type).toBe(NodeType.LEVEL);
         expect(nodes[0].options).toMatchObject({ high_output: 255 });
       },

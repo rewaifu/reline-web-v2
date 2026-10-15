@@ -1,5 +1,5 @@
-import { omit, type Component } from "solid-js";
-import { Switch } from "@rebase-ui/solid/switch";
+import { omitProps, type Component } from "reze-js";
+import { Switch } from "@rebase-ui/reze/switch";
 import styles from "./switch.module.scss";
 
 export interface UiSwitchProps {
@@ -16,15 +16,14 @@ export interface UiSwitchProps {
 
 /** Toggle switch. */
 export const UiSwitch: Component<UiSwitchProps> = (props) => {
-  const rest = omit(
-    props,
+  const rest = omitProps(props, [
     "checked",
     "onChange",
     "label",
     "ariaLabel",
     "id",
     "class",
-  );
+  ]);
 
   return (
     <span class={[styles.switch, props.class]}>

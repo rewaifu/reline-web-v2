@@ -1,11 +1,12 @@
-import { Errored, type Accessor, type Component } from "solid-js";
-import { Dynamic } from "@solidjs/web";
+import { dynamic } from "reze-js";
+import { Errored } from "~/components/errored/errored";
 import { pipeline } from "~/lib/pipeline/hooks";
 import {
   uiRegistry,
   type OverridableId,
   type OverrideProps,
 } from "~/lib/ui/registry";
+import type { Component } from "~/types/component";
 
 /** One override on top of what it replaces. If it throws while rendering, the
  * previous component is rendered in its place — a broken plugin degrades the
@@ -16,16 +17,20 @@ const guarded = <P extends object>(
   next: Component<P>,
   previous: Component<P>,
 ): Component<P> => {
-  const Guarded: Component<P> = (props) => (
-    <Errored
-      fallback={(error: Accessor<unknown>) => {
-        pipeline.report("ui", `${owner}:${id}`, error());
-        return <Dynamic component={previous} {...props} />;
-      }}
-    >
-      <Dynamic component={next} {...props} />
-    </Errored>
-  );
+  const Guarded: Component<P> = (props) => {
+    const Next = next;
+    const Previous = previous;
+    return (
+      <Errored
+        fallback={(error: () => unknown) => {
+          pipeline.report("ui", `${owner}:${id}`, error());
+          return <Previous {...props} />;
+        }}
+      >
+        <Next {...props} />
+      </Errored>
+    );
+  };
   return Guarded;
 };
 
@@ -77,13 +82,12 @@ export const overridable = <I extends OverridableId>(
       cache.set(id, { base: Base, key, component: current });
       return current;
     };
-    // `Dynamic` is generic over one props type; this id's is `OverrideProps[I]`
-    return (
-      <Dynamic
-        component={resolved() as unknown as Component<Record<string, unknown>>}
-        {...(props as unknown as Record<string, unknown>)}
-      />
+    // one component per instance: the source re-runs when the override list changes
+    const Current = dynamic(
+      () =>
+        resolved() as unknown as Component<Record<string, unknown>>,
     );
+    return <Current {...(props as unknown as Record<string, unknown>)} />;
   };
   return Overridable;
 };

@@ -1,15 +1,14 @@
 import {
   For,
+  Portal,
   Show,
-  createEffect,
-  createMemo,
-  createSignal,
+  computed,
   createUniqueId,
-  omit,
-  untrack,
+  effect,
+  omitProps,
+  signal,
   type Component,
-} from "solid-js";
-import { Portal } from "@solidjs/web";
+} from "reze-js";
 import { Icon } from "../icon";
 import styles from "./combobox.module.scss";
 import { createDismissOnOutside } from "../create-dismiss-on-outside";
@@ -36,8 +35,7 @@ export interface UiComboboxProps {
  * click, chevron) shows the whole list; filtering starts with the first
  * keystroke. Focus stays in the input while the menu is open. */
 export const UiCombobox: Component<UiComboboxProps> = (props) => {
-  const rest = omit(
-    props,
+  const rest = omitProps(props, [
     "onChange",
     "value",
     "items",
@@ -47,42 +45,46 @@ export const UiCombobox: Component<UiComboboxProps> = (props) => {
     "placement",
     "onEnterMatch",
     "triggerMode",
-  );
-  const [open, setOpen] = createSignal(false);
-  const [edited, setEdited] = createSignal(false);
-  const [highlight, setHighlight] = createSignal(-1);
-  const [text, setText] = createSignal(untrack(() => props.value));
-  const [focused, setFocused] = createSignal(false);
+  ]);
+  let open = signal(false);
+  let edited = signal(false);
+  let highlight = signal(-1);
+  let text = signal(props.value);
+  let focused = signal(false);
   const listId = `${createUniqueId()}-listbox`;
-  let controlEl: HTMLDivElement | undefined;
-  let contentEl: HTMLDivElement | undefined;
-  let inputEl: HTMLInputElement | undefined;
-  let listEl: HTMLUListElement | undefined;
+  let controlEl = signal<HTMLDivElement | undefined>(undefined);
+  let contentEl = signal<HTMLDivElement | undefined>(undefined);
+  let inputEl = signal<HTMLInputElement | undefined>(undefined);
+  let listEl = signal<HTMLUListElement | undefined>(undefined);
 
-  createDismissOnOutside(open, setOpen, () => [controlEl, contentEl]);
+  createDismissOnOutside(
+    () => open,
+    (value) => (open = value),
+    () => [controlEl, contentEl],
+  );
   createMenuPosition(
-    open,
+    () => open,
     () => controlEl,
     () => contentEl,
     () => props.placement ?? "bottom-start",
   );
   // an outside change (preset applied, option picked elsewhere) lands in the
   // field unless the user is editing it right now
-  createEffect(
-    () => [props.value, focused()] as const,
-    ([value, isFocused]) => {
-      if (!isFocused) setText(value);
-    },
-  );
+  effect(() => {
+    const value = props.value;
+    if (!focused) text = value;
+  });
 
   // options are the raw wire values (`slinear4`, `dpid_0.25`): the input
   // shows what the runner parses, as the original editor did, and typing
   // `lanczos` matches `lanczos`
-  const visible = createMemo(() => {
-    if (!edited()) return props.items;
-    const query = text().toLowerCase();
-    return props.items.filter((item) => item.toLowerCase().includes(query));
-  });
+  const visible = computed(
+    edited
+      ? props.items.filter((item) =>
+          item.toLowerCase().includes(text.toLowerCase()),
+        )
+      : props.items,
+  );
 
   const scrollHighlight = () => {
     requestAnimationFrame(() => {
@@ -94,21 +96,21 @@ export const UiCombobox: Component<UiComboboxProps> = (props) => {
 
   const openMenu = (fromTop = true) => {
     if (props.items.length === 0) return;
-    const list = visible();
+    const list = visible;
     const selected = list.indexOf(props.value);
-    setHighlight(selected >= 0 ? selected : fromTop ? 0 : list.length - 1);
-    setOpen(true);
+    highlight = selected >= 0 ? selected : fromTop ? 0 : list.length - 1;
+    open = true;
   };
 
   const closeMenu = () => {
-    setOpen(false);
-    setHighlight(-1);
+    open = false;
+    highlight = -1;
   };
 
   const commitIndex = (index: number) => {
-    const value = visible()[index];
+    const value = visible[index];
     if (value === undefined) return;
-    setText(value);
+    text = value;
     closeMenu();
     props.onChange(value);
   };
@@ -118,131 +120,131 @@ export const UiCombobox: Component<UiComboboxProps> = (props) => {
       closeMenu();
       return;
     }
-    const typed = text().trim().toLowerCase();
+    const typed = text.trim().toLowerCase();
     if (typed === "") return;
     const match = props.items.find((item) =>
       item.toLowerCase().includes(typed),
     );
     if (match === undefined) return;
-    setText(match);
+    text = match;
     closeMenu();
     props.onEnterMatch(match);
   };
 
   const onEnter = () => {
-    const list = visible();
-    const at = highlight();
+    const list = visible;
+    const at = highlight;
     if (at >= 0 && at < list.length) commitIndex(at);
     else submitMatch();
   };
 
   const move = (delta: number) => {
-    const count = visible().length;
+    const count = visible.length;
     if (count === 0) return;
     // clamp, not wrap: wrapping teleports the highlight across the whole list
-    setHighlight(Math.min(count - 1, Math.max(0, highlight() + delta)));
+    highlight = Math.min(count - 1, Math.max(0, highlight + delta));
     scrollHighlight();
   };
 
   const mode = () => props.triggerMode ?? "focus";
 
   const onFocus = () => {
-    setFocused(true);
-    if (mode() !== "focus" || open()) return;
+    focused = true;
+    if (mode() !== "focus" || open) return;
     // entering the field lists the whole registry; the typed text filters
     // only once the user starts editing
-    setEdited(false);
+    edited = false;
     openMenu(true);
   };
 
   const onInputClick = () => {
-    if (mode() !== "focus" || open()) return;
-    setEdited(false);
+    if (mode() !== "focus" || open) return;
+    edited = false;
     openMenu(true);
   };
 
   const onTextInput = (e: { currentTarget: HTMLInputElement }) => {
-    setText(e.currentTarget.value);
-    setEdited(true);
+    text = e.currentTarget.value;
+    edited = true;
     if (mode() === "manual") return;
-    if (!open()) {
+    if (!open) {
       openMenu(true);
       return;
     }
-    if (highlight() >= visible().length) setHighlight(0);
+    if (highlight >= visible.length) highlight = 0;
   };
 
   const onInputKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Tab") {
       closeMenu();
-      setText(props.value);
+      text = props.value;
       return;
     }
     if (e.key === "Escape") {
       closeMenu();
-      setText(props.value);
+      text = props.value;
       return;
     }
     if (e.key === "Enter") {
-      if (!open()) return;
+      if (!open) return;
       e.preventDefault();
       onEnter();
       return;
     }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      if (!open()) {
+      if (!open) {
         if (mode() === "manual") return;
-        setEdited(false);
+        edited = false;
         openMenu(e.key === "ArrowDown");
         return;
       }
       move(e.key === "ArrowDown" ? 1 : -1);
       return;
     }
-    if (!open()) return;
+    if (!open) return;
     if (e.key === "Home") {
       e.preventDefault();
-      setHighlight(0);
+      highlight = 0;
       scrollHighlight();
     } else if (e.key === "End") {
       e.preventDefault();
-      setHighlight(visible().length - 1);
+      highlight = visible.length - 1;
       scrollHighlight();
     }
   };
 
   const onBlur = () => {
-    setFocused(false);
+    focused = false;
     // option picks preventDefault their pointerdown, so a blur is always a
     // genuine leave: discard the draft and show the committed value again
-    if (!open()) return;
+    if (!open) return;
     closeMenu();
-    setText(props.value);
+    text = props.value;
   };
 
   const onTriggerClick = () => {
     inputEl?.focus();
-    if (open()) {
+    if (open) {
       closeMenu();
       return;
     }
-    setEdited(false);
+    edited = false;
     openMenu(true);
   };
 
   return (
     <div {...rest} class={[styles.combobox, props.class]}>
-      <div ref={controlEl} class={styles.control}>
+      <div ref={(el) => (controlEl = el)} class={styles.control}>
         <input
-          ref={inputEl}
+          ref={(el) => (inputEl = el)}
           id={props.id}
-          role="combobox"
+          attr:role="combobox"
           aria-label={props.ariaLabel}
-          aria-expanded={open() ? "true" : "false"}
-          aria-controls={open() ? listId : undefined}
+          aria-expanded={open ? "true" : "false"}
+          aria-controls={open ? listId : undefined}
           aria-activedescendant={
-            open() && highlight() >= 0 ? `${listId}-${highlight()}` : undefined
+            open && highlight >= 0 ? `${listId}-${highlight}` : undefined
           }
           aria-autocomplete="list"
           autocomplete="off"
@@ -250,7 +252,7 @@ export const UiCombobox: Component<UiComboboxProps> = (props) => {
           spellcheck={false}
           class={styles.input}
           placeholder={props.placeholder ?? t("ui.select")}
-          value={text()}
+          value={text}
           onFocus={onFocus}
           onClick={onInputClick}
           onInput={onTextInput}
@@ -261,39 +263,39 @@ export const UiCombobox: Component<UiComboboxProps> = (props) => {
           type="button"
           class={styles.trigger}
           aria-label={props.ariaLabel ?? t("ui.openOptions")}
-          aria-expanded={open() ? "true" : "false"}
+          aria-expanded={open ? "true" : "false"}
           onPointerDown={(e) => e.preventDefault()}
           onClick={onTriggerClick}
         >
           <Icon name="chevron-down" size={16} />
         </button>
       </div>
-      <Show when={open()}>
+      <Show when={open}>
         <Portal>
           <div
-            ref={contentEl}
+            ref={(el) => (contentEl = el)}
             class={styles.content}
             style={{ position: "fixed", left: "0px", top: "0px" }}
           >
             <ul
-              ref={listEl}
+              ref={(el) => (listEl = el)}
               id={listId}
-              role="listbox"
+              attr:role="listbox"
               class={styles.listbox}
               aria-label={props.ariaLabel}
             >
-              <For each={visible()}>
+              <For each={visible}>
                 {(item, index) => (
                   <li
-                    id={`${listId}-${index()}`}
-                    role="option"
+                    id={`${listId}-${index}`}
+                    attr:role="option"
                     aria-selected={item === props.value ? "true" : "false"}
                     data-selected={item === props.value ? "" : undefined}
-                    data-highlighted={index() === highlight() ? "" : undefined}
+                    data-highlighted={index === highlight ? "" : undefined}
                     class={styles.item}
                     onPointerDown={(e) => e.preventDefault()}
-                    onClick={() => commitIndex(index())}
-                    onPointerMove={() => setHighlight(index())}
+                    onClick={() => commitIndex(index)}
+                    onPointerMove={() => (highlight = index)}
                   >
                     {item}
                   </li>

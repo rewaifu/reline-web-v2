@@ -1,4 +1,5 @@
-import { For, type Component } from "solid-js";
+import { For } from "reze-js";
+import type { Component } from "~/types/component";
 
 /** Inline copies of Tabler (https://tabler.io/icons) outline paths —
  * 24×24 grid, stroke 2, round caps. Avoids a runtime icon dependency. */

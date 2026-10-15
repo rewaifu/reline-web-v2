@@ -53,7 +53,7 @@ on again.
 **If something breaks.**
 
 - `?plugins=off` in the address — safe mode: no plugin is loaded.
-- If the page freezes (Solid halts all reactivity on any uncaught error inside an effect), an
+- If the page freezes, an
   overlay offers "Disable plugins and reload".
 - If the previous run never got to "the page is alive" (the tab was killed, the page froze), the
   plugins that started then are switched off at the next open, and the Plugins tab says so.
@@ -84,7 +84,7 @@ export default definePlugin<"nodes" | "i18n">({
 
 ```ts
 // vite.config.ts
-import solid from "@solidjs/vite-plugin";
+import reze from "@rezejs/vite-plugin";
 import { defineConfig } from "vite";
 import { relinePlugin } from "@reline/plugin-sdk/vite"; // sdk/vite.ts in this repository
 
@@ -98,7 +98,7 @@ export default defineConfig({
         caps: ["nodes", "i18n"],
       },
     }),
-    solid(),
+    reze(),
   ],
   build: { outDir: "dist", lib: { entry: "src/index.tsx", formats: ["es"] } },
 });
@@ -108,7 +108,7 @@ export default defineConfig({
 https — the link to `plugin.json` is the install link.
 
 No build is fine too: a plain ES module without imports, `export default { activate(api) {…} }`,
-plus a `plugin.json` with a hash (`scripts/pin-plugin.mjs`). Take Solid from `api.solid` / `api.web`.
+plus a `plugin.json` with a hash (`scripts/pin-plugin.mjs`). Without a build there is no Reze: use only `api`.
 
 ## Local development
 
@@ -135,7 +135,7 @@ A plugin's log (`api.log`) and hook failures are visible in the Plugins tab.
   "id": "acme.border", // a.b[.c…], lower-case, [a-z0-9-]; prefix of everything the plugin owns
   "name": "Border",
   "version": "1.0.0",
-  "api": 1, // generation of the editor API; incompatible plugins are refused
+  "api": 2, // generation of the editor API; incompatible plugins are refused
   "description": "…", // one language; the fallback for every reader
   "descriptions": { "ru": "…", "en": "…" }, // optional, either; shown in the reader's language
   "entry": "border.js", // relative to the manifest
@@ -157,8 +157,8 @@ Loading rules: only `https:` (or `http://localhost`); code on another origin is 
 
 `activate(api)` is called once; it may be `async` (up to 5 s) and may return a cleanup function.
 Everything registered through `api.*` is removed when the plugin is switched off. Always present:
-`api.id`, `api.version`, `api.solid`, `api.web` (**the editor's own copies of Solid — use them**; a
-Solid bundled into the plugin does not work with the editor), `api.log(...)`, `api.onDispose(fn)`.
+`api.id`, `api.version`, `api.log(...)`, `api.onDispose(fn)`. Reze comes from `reze-js` in the plugin source;
+the build rewrites that import to the editor's own copy (a copy bundled into the plugin is not used).
 
 Names owned by a plugin start with its id: node types `<id>.<name>`, store actions `<id>:<name>`,
 WS methods `x.<id>.<name>`; hooks get the `<id>:` prefix automatically.
@@ -191,8 +191,7 @@ and when a definition appears their options are brought to its schema.
 - `styles(css)` — global CSS after the editor's; may change tokens (`:root{--color-…}`). Keep your
   own selectors under your own class.
 
-An error **inside an effect** (not in a render) halts all of Solid's reactivity — an error boundary
-does not catch it. Wrap effect code in `try/catch`.
+An error **inside an effect** (not in a render) is handled where it happens: wrap effect code in `try/catch`.
 
 ### `api.pipeline`
 
@@ -232,7 +231,7 @@ already going), `run.stop()`, `run.phase()`, `run.progress()`, `run.onFinish(fn)
 
 A worker plugin gets a smaller `api`: `id`, `version`, `log(...)` and one hook,
 `api.pipeline.beforeRun(fn)`, where `fn(config)` returns the config (or a promise of it). There is
-no Solid, no DOM, no other namespace. Write it as a plain ES module — see
+no Reze, no DOM, no other namespace. Write it as a plain ES module — see
 `examples/writer-suffix/writer-suffix.js`:
 
 ```js
@@ -287,10 +286,10 @@ and run inside a `memo`, which cannot wait for a message.
 
 ## Building and publishing
 
-- `relinePlugin()` (`sdk/vite.ts`) rewrites the `solid-js` and `@solidjs/web` imports into reads from
-  `globalThis.__RELINE__` (the editor's copies) and, after the build, writes `plugin.json` with the
-  SHA-384. The list of names is in `sdk/host-exports.json`; after a Solid update run
-  `pnpm sdk:exports` (`sdk/sdk.test.ts` fails when the list is stale).
+- `relinePlugin()` (`sdk/vite.ts`) rewrites the `reze-js` imports into reads from `globalThis.__RELINE__`
+  (the editor's copies: `reze-js`, `reze-js/internal/reactivity`, `reze-js/internal/runtime`, `reze-js/jsx-runtime`)
+  and, after the build, writes `plugin.json` with the SHA-384. The names are in `sdk/host-exports.json`; after a
+  Reze update run `pnpm sdk:exports` (`sdk/sdk.test.ts` fails when the list is stale).
 - A built plugin must not be formatted or edited by hand: the hash is pinned byte for byte
   (`public/plugins/**` is excluded from `oxfmt` and `oxlint`).
 - In this repository: `pnpm plugin:build` builds Config sequence and refreshes the catalog
@@ -374,8 +373,8 @@ step), `i18n` (ru/en).
 
 The UI is built from `ui.kit`, so it looks like the native tabs.
 
-The source is a model for your own plugins: it uses `createStore`, the split
-`createEffect(compute, apply)`, `ui.slot`, `ui.panelTab`, `ui.styles` and an ru/en dictionary.
+The source is a model for your own plugins: it uses `store`, `effect` with `untrack` for the side effect,
+`ui.slot`, `ui.panelTab`, `ui.styles` and an ru/en dictionary.
 
 ### Writer suffix (example only)
 
@@ -394,9 +393,8 @@ is replaced (see `examples/sequence/sequence.test.tsx`). For install checks ther
 - `id` like `acme.border`; everything the plugin owns starts with it (node types, actions `<id>:…`,
   WS methods `x.<id>.…`, `localStorage` keys — through `api.storage`).
 - Only the `caps` you need. If `pipeline` is enough — make it `"sandbox": "worker"`.
-- Solid only from the editor (`relinePlugin()` rewrites the imports; without a build — `api.solid`).
-- Every effect: reactive reads go into the first function of `createEffect(compute, apply)`; inside
-  `apply` read nothing reactive (`untrack`); wrap the body in `try/catch`.
+- Reze comes from the host only: the build rewrites `reze-js` imports. A plugin's own Reze copy never updates the page.
+- Every effect: one function. Read reactive values in its body; side effects go in `untrack(...)`; wrap the body in `try/catch`.
 - Do not serialise a large store from an effect over the whole `store` (thousands of subscriptions):
   save from a change counter instead.
 - UI from `api.ui.kit`; colours and spacing from the tokens `--color-*`, `--space-*`, `--radius-*`;

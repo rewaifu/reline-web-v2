@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createWatchdog } from "./ui-watchdog";
 
 /** The watchdog exists for the failure a boundary cannot see: an error thrown
- * inside an effect halts Solid's whole reactive system, and the page keeps
+ * inside an effect can stall the scheduler, and the page keeps
  * painting while every input ignores the keyboard. Timers keep running, so the
  * probe is a token written by a signal and read back from the DOM — if the DOM
  * stops following the beat, the scheduler is dead. */

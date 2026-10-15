@@ -1,15 +1,15 @@
 import {
-  type Component,
+  computed,
+  effect,
   For,
-  Show,
-  createEffect,
-  createMemo,
   Match,
+  Show,
+  signal,
   Switch,
-  createSignal,
-  onSettled,
-} from "solid-js";
+  untrack,
+} from "reze-js";
 import { Icon, Input, UiButton, UiSwitch } from "~/components/ui";
+import type { Component } from "~/types/component";
 import { locale, message, raw, render, t, type LocalText } from "~/lib/i18n";
 import { pipeline } from "~/lib/pipeline/hooks";
 import { PluginLoadError } from "~/lib/plugins/loader";
@@ -46,27 +46,24 @@ const Consent: Component<{
 }> = (props) => {
   // every requested permission starts granted; the user may take any away and
   // the plugin simply will not see that part of the API
-  const [denied, setDenied] = createSignal<ReadonlySet<Capability>>(new Set());
+  let denied = signal<ReadonlySet<Capability>>(new Set());
   const granted = () =>
-    props.preview.manifest.caps.filter((cap) => !denied().has(cap));
-  const toggle = (cap: Capability) =>
-    setDenied((all) => {
-      const next = new Set(all);
-      if (next.has(cap)) next.delete(cap);
-      else next.add(cap);
-      return next;
-    });
+    props.preview.manifest.caps.filter((cap) => !denied.has(cap));
+  const toggle = (cap: Capability) => {
+    const next = new Set(denied);
+    if (next.has(cap)) next.delete(cap);
+    else next.add(cap);
+    denied = next;
+  };
   const updating = () => props.preview.existing !== undefined;
-  // the card opens above a long list when it was asked for from the catalog
-  // far below: bring it into view
-  let root: HTMLElement | undefined;
-  onSettled(() => {
-    root?.scrollIntoView?.({ block: "nearest" });
-  });
 
   return (
     <section
-      ref={root}
+      // the card opens above a long list when it was asked for from the
+      // catalog far below: bring it into view once it is in the DOM
+      ref={(el) =>
+        queueMicrotask(() => el.scrollIntoView?.({ block: "nearest" }))
+      }
       class={styles.consent}
       aria-label={t("plugins.consent.title")}
     >
@@ -80,7 +77,7 @@ const Consent: Component<{
         <span class={styles.id}>{props.preview.manifest.id}</span>
       </p>
       <Show when={pluginDescription(props.preview.manifest, locale())}>
-        {(text) => <p class={styles.muted}>{text()}</p>}
+        {(text) => <p class={styles.muted}>{text}</p>}
       </Show>
       <dl class={styles.facts}>
         <dt>{t("plugins.consent.source")}</dt>
@@ -111,7 +108,7 @@ const Consent: Component<{
               <label class={styles.cap}>
                 <input
                   type="checkbox"
-                  checked={!denied().has(cap)}
+                  checked={!denied.has(cap)}
                   onChange={() => toggle(cap)}
                 />
                 <span>
@@ -206,13 +203,13 @@ const PluginRow: Component<{
         {props.plugin.manifest.id} · {origin()}
       </p>
       <Show when={pluginDescription(props.plugin.manifest, locale())}>
-        {(text) => <p class={styles.muted}>{text()}</p>}
+        {(text) => <p class={styles.muted}>{text}</p>}
       </Show>
       <Show when={props.plugin.disabledReason === "crash"}>
         <p class={styles.warn}>{t("plugins.crashDisabled")}</p>
       </Show>
       <Show when={status().error}>
-        {(text) => <p class={styles.err}>{text()}</p>}
+        {(text) => <p class={styles.err}>{text}</p>}
       </Show>
       <p class={styles.chips}>
         <Show when={props.plugin.bundled === true}>
@@ -261,22 +258,22 @@ type CatalogState =
 const CatalogSection: Component<{
   onPick: (entry: CatalogPlugin) => void;
 }> = (props) => {
-  const [state, setState] = createSignal<CatalogState>({ status: "idle" });
-  const [open, setOpen] = createSignal(false);
-  const [query, setQuery] = createSignal("");
+  let state = signal<CatalogState>({ status: "idle" });
+  let open = signal(false);
+  let query = signal("");
 
   const load = async () => {
-    setState({ status: "loading" });
+    state = { status: "loading" };
     try {
-      setState({ status: "ready", catalog: await loadCatalog() });
+      state = { status: "ready", catalog: await loadCatalog() };
     } catch (error) {
-      setState({ status: "failed", reason: describeError(error) });
+      state = { status: "failed", reason: describeError(error) };
     }
   };
   const toggle = () => {
-    const next = !open();
-    setOpen(next);
-    if (next && state().status === "idle") void load();
+    const next = !open;
+    open = next;
+    if (next && state.status === "idle") void load();
   };
 
   /** What the button of an entry does, given what is installed. */
@@ -289,34 +286,32 @@ const CatalogSection: Component<{
   };
 
   const ready = () => {
-    const current = state();
+    const current = state;
     return current.status === "ready" ? current.catalog : undefined;
   };
   const failed = () => {
-    const current = state();
+    const current = state;
     return current.status === "failed" ? current.reason : undefined;
   };
-  const found = createMemo(() =>
-    searchCatalog(ready()?.plugins ?? [], query()),
-  );
+  const found = computed(searchCatalog(ready()?.plugins ?? [], query));
 
   return (
     <section class={styles.catalog}>
       <button
         type="button"
         class={styles.disclosure}
-        aria-expanded={open() ? "true" : "false"}
+        aria-expanded={open ? "true" : "false"}
         onClick={toggle}
       >
-        <Icon name={open() ? "chevron-down" : "chevron-right"} size={14} />
+        <Icon name={open ? "chevron-down" : "chevron-right"} size={14} />
         {t("plugins.catalog.title")}
         <Show when={ready()}>
           {(catalog) => (
-            <span class={styles.count}>{catalog().plugins.length}</span>
+            <span class={styles.count}>{catalog.plugins.length}</span>
           )}
         </Show>
       </button>
-      <Show when={open()}>
+      <Show when={open}>
         <Switch
           fallback={<p class={styles.muted}>{t("plugins.catalog.loading")}</p>}
         >
@@ -324,7 +319,7 @@ const CatalogSection: Component<{
             {(reason) => (
               <>
                 <p class={styles.muted}>
-                  {t("plugins.catalog.failed", { detail: render(reason()) })}
+                  {t("plugins.catalog.failed", { detail: render(reason) })}
                 </p>
                 <button
                   type="button"
@@ -339,20 +334,20 @@ const CatalogSection: Component<{
           <Match when={ready()}>
             <Input
               type="search"
-              value={query()}
+              value={query}
               placeholder={t("plugins.catalog.search")}
               aria-label={t("plugins.catalog.search")}
               spellcheck={false}
-              onInput={(e) => setQuery(e.currentTarget.value)}
+              onInput={(e) => (query = e.currentTarget.value)}
             />
             <Show
-              when={found().length > 0}
+              when={found.length > 0}
               fallback={
                 <p class={styles.muted}>{t("plugins.catalog.empty")}</p>
               }
             >
               <ul class={[styles.list, styles.catalogList]}>
-                <For each={found()}>
+                <For each={found}>
                   {(entry) => (
                     <li class={styles.row}>
                       <div class={styles.rowHead}>
@@ -368,7 +363,7 @@ const CatalogSection: Component<{
                         </UiButton>
                       </div>
                       <Show when={pluginDescription(entry, locale())}>
-                        {(text) => <p class={styles.muted}>{text()}</p>}
+                        {(text) => <p class={styles.muted}>{text}</p>}
                       </Show>
                       <p class={styles.chips}>
                         <Show when={entry.sandbox === "worker"}>
@@ -391,52 +386,52 @@ const CatalogSection: Component<{
 };
 
 export const PluginsTab: Component = () => {
-  const [url, setUrl] = createSignal("");
-  const [preview, setPreview] = createSignal<InstallPreview>();
-  const [busy, setBusy] = createSignal(false);
-  const [problem, setProblem] = createSignal<LocalText>();
+  let url = signal("");
+  let preview = signal<InstallPreview | undefined>(undefined);
+  let busy = signal(false);
+  let problem = signal<LocalText | undefined>(undefined);
 
   const check = async (target: string, pin?: string) => {
     if (target.trim() === "") return;
-    setBusy(true);
-    setProblem(undefined);
-    setPreview(undefined);
+    busy = true;
+    problem = undefined;
+    preview = undefined;
     try {
-      setPreview(await pluginRuntime.preview(target, pin));
+      preview = await pluginRuntime.preview(target, pin);
     } catch (error) {
-      setProblem(describeError(error));
+      problem = describeError(error);
     } finally {
-      setBusy(false);
+      busy = false;
     }
   };
 
   // a `?plugin=` link is shown here for consent, never installed on sight
-  createEffect(
-    () => pluginRuntime.pendingInstall(),
-    (link) => {
-      if (link === undefined) return;
-      setUrl(link);
+  effect(() => {
+    const link = pluginRuntime.pendingInstall();
+    if (link === undefined) return;
+    untrack(() => {
+      url = link;
       pluginRuntime.clearPendingInstall();
       void check(link);
-    },
-  );
+    });
+  });
 
   const confirm = async (granted: Capability[]) => {
-    const current = preview();
+    const current = preview;
     if (current === undefined) return;
-    setBusy(true);
+    busy = true;
     try {
       await pluginRuntime.install(current, granted);
-      setPreview(undefined);
-      setUrl("");
+      preview = undefined;
+      url = "";
     } catch (error) {
-      setProblem(describeError(error));
+      problem = describeError(error);
     } finally {
-      setBusy(false);
+      busy = false;
     }
   };
 
-  const recent = () => pipeline.failures().slice(-5).reverse();
+  const recent = computed(pipeline.failures().slice(-5).reverse());
 
   return (
     <div class={styles.tab}>
@@ -462,7 +457,7 @@ export const PluginsTab: Component = () => {
         class={styles.install}
         onSubmit={(e) => {
           e.preventDefault();
-          void check(url());
+          void check(url);
         }}
       >
         <label class={styles.sectionLabel} for="plugin-url">
@@ -472,34 +467,34 @@ export const PluginsTab: Component = () => {
           <Input
             id="plugin-url"
             class={styles.input}
-            value={url()}
+            value={url}
             placeholder={t("plugins.install.placeholder")}
             spellcheck={false}
-            onInput={(e) => setUrl(e.currentTarget.value)}
+            onInput={(e) => (url = e.currentTarget.value)}
           />
-          <UiButton type="submit" disabled={busy() || url().trim() === ""}>
-            {busy() && preview() === undefined
+          <UiButton type="submit" disabled={busy || url.trim() === ""}>
+            {busy && preview === undefined
               ? t("plugins.install.checking")
               : t("plugins.install.check")}
           </UiButton>
         </div>
       </form>
 
-      <Show when={problem()}>
+      <Show when={problem}>
         {(text) => (
-          <p class={styles.err} role="alert">
-            {render(text())}
+          <p class={styles.err} attr:role="alert">
+            {render(text)}
           </p>
         )}
       </Show>
 
-      <Show when={preview()}>
+      <Show when={preview}>
         {(current) => (
           <Consent
-            preview={current()}
-            busy={busy()}
+            preview={current}
+            busy={busy}
             onConfirm={(granted) => void confirm(granted)}
-            onCancel={() => setPreview(undefined)}
+            onCancel={() => (preview = undefined)}
           />
         )}
       </Show>
@@ -515,7 +510,7 @@ export const PluginsTab: Component = () => {
               <PluginRow
                 plugin={plugin}
                 onUpdate={(target) => {
-                  setUrl(target);
+                  url = target;
                   void check(target);
                 }}
               />
@@ -526,15 +521,15 @@ export const PluginsTab: Component = () => {
 
       <CatalogSection
         onPick={(entry) => {
-          setUrl(entry.manifestUrl);
+          url = entry.manifestUrl;
           void check(entry.manifestUrl, entry.integrity);
         }}
       />
 
-      <Show when={recent().length > 0}>
+      <Show when={recent.length > 0}>
         <p class={styles.sectionLabel}>{t("plugins.failures")}</p>
         <ul class={styles.failures}>
-          <For each={recent()}>
+          <For each={recent}>
             {(failure) => (
               <li>
                 <code>{failure.id}</code> · {failure.stage}

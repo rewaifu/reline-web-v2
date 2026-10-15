@@ -1,6 +1,6 @@
-import { fireEvent, render } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fire, mount, settle } from "@rezejs/testing-library";
+import { signal } from "reze-js";
 
 /** Reported: typing a folder name at the very start of a path field (no `/`
  * yet) showed no suggestions, while `./raws` or `raws/` did. The runner splits
@@ -22,28 +22,33 @@ vi.mock("~/lib/ls-client", () => ({
   lsClient: { ls: (path: string, opts?: unknown) => ls(path, opts) },
 }));
 
-const { PathRow } = await import("~/components/nodes/forms/shared");
+import { PathRow } from "~/components/nodes/forms/shared";
 
 const FOLDER = ["raws", "raws_extra", "other"];
 
 const Harness = () => {
-  const [value, setValue] = createSignal("");
+  let value = signal("");
   return (
     <PathRow
       label="Path to folder"
-      value={value()}
-      onInput={setValue}
+      value={value}
+      onInput={(next: string) => (value = next)}
       source="dirs"
     />
   );
 };
 
-const mount = () => render(() => <Harness />);
+const combobox = (el: HTMLElement) =>
+  el.querySelector('[role="combobox"]') as HTMLInputElement;
 
-const combobox = (view: ReturnType<typeof mount>) =>
-  view.getByRole("combobox") as HTMLInputElement;
+const typeInto = (input: HTMLInputElement, text: string) => {
+  input.value = text;
+  fire(input, "input");
+};
 
 describe("path completion", () => {
+  afterEach(cleanup);
+
   beforeEach(() => {
     ls.mockReset();
     ls.mockResolvedValue({
@@ -53,51 +58,59 @@ describe("path completion", () => {
   });
 
   it("asks about a bare folder name", async () => {
-    const view = mount();
-    const input = combobox(view);
-    fireEvent.input(input, { target: { value: "raws" } });
+    const view = mount(() => <Harness />);
+    const input = combobox(view.el);
+    typeInto(input, "raws");
     await vi.waitFor(() => expect(ls).toHaveBeenCalledWith("./raws", {}));
     // the field itself keeps what was typed — the `./` is a wire detail
     expect(input.value).toBe("raws");
   });
 
   it("leaves a value that already has a slash alone", async () => {
-    const view = mount();
-    fireEvent.input(combobox(view), { target: { value: "/content/raw" } });
+    const view = mount(() => <Harness />);
+    typeInto(combobox(view.el), "/content/raw");
     await vi.waitFor(() => expect(ls).toHaveBeenCalledWith("/content/raw", {}));
   });
 
   it("opens the menu on a bare name and completes it with a slash", async () => {
-    const view = mount();
-    const input = combobox(view);
-    fireEvent.input(input, { target: { value: "raws" } });
-    const list = await view.findByRole("listbox");
+    const view = mount(() => <Harness />);
+    const input = combobox(view.el);
+    typeInto(input, "raws");
+    let list: Element | null = null;
+    await vi.waitFor(() => {
+      list = view.el.querySelector('[role="listbox"]');
+      expect(list).not.toBeNull();
+    });
     // `source="dirs"` keeps folders only — the file match must not appear
-    expect(list.textContent).toBe("raws/");
-    fireEvent.click(list.querySelector("button") as HTMLButtonElement);
+    expect((list as unknown as Element).textContent).toBe("raws/");
+    fire((list as unknown as Element).querySelector("button") as Element, "click");
     await vi.waitFor(() => expect(input.value).toBe("raws/"));
   });
 
   it("asks with the folder in place once it is complete", async () => {
-    const view = mount();
-    fireEvent.input(combobox(view), { target: { value: "raws/" } });
+    const view = mount(() => <Harness />);
+    typeInto(combobox(view.el), "raws/");
     await vi.waitFor(() => expect(ls).toHaveBeenCalledWith("raws/", {}));
   });
 
   it("lists the whole folder on focus, filters only once typing", async () => {
-    const [value, setValue] = createSignal("raws");
-    const view = render(() => (
-      <PathRow
-        label="Path to folder"
-        value={value()}
-        onInput={setValue}
-        source="dirs"
-      />
-    ));
-    const input = view.getByRole("combobox") as HTMLInputElement;
-    fireEvent.focus(input);
+    const Seeded = () => {
+      let value = signal("raws");
+      return (
+        <PathRow
+          label="Path to folder"
+          value={value}
+          onInput={(next: string) => (value = next)}
+          source="dirs"
+        />
+      );
+    };
+    const view = mount(() => <Seeded />);
+    const input = combobox(view.el);
+    fire(input, "focus");
     // the bare name is a prefix filter only while typing — entering the
     // field lists the whole current directory instead
     await vi.waitFor(() => expect(ls).toHaveBeenCalledWith("./", {}));
+    await settle();
   });
 });

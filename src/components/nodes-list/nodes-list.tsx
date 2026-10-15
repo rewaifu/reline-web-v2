@@ -1,5 +1,5 @@
-import { type Component, For, Show, useContext } from "solid-js";
-import type { Store } from "solid-js";
+import { For, Show, signal, useContext } from "reze-js";
+import type { Component } from "~/types/component";
 import { createDragReorder } from "~/hooks/use-drag-reorder";
 import { flipReorder } from "~/hooks/use-flip-reorder";
 import { useAddNode, useToggleEnabled } from "~/hooks/use-node-actions";
@@ -14,8 +14,9 @@ import styles from "./nodes-list.module.scss";
 
 export interface NodesListProps {
   selectedUid: () => string | null;
-  /** Keyed projection: only the entering/leaving rows recompute on a click. */
-  isSelected: Store<Record<string, boolean>>;
+  /** Per-row selection check: only the rows whose state changes re-render on
+   * a click (a selector built once by the caller). */
+  isSelected: (uid: string) => boolean;
   onSelect: (uid: string) => void;
 }
 
@@ -23,7 +24,8 @@ export const NodesList: Component<NodesListProps> = (props) => {
   const nodes = useContext(NodesContext);
   const dispatch = useContext(NodesDispatchContext);
 
-  let itemsEl: HTMLDivElement | undefined;
+  // the drag hook tracks the container, so it is a signal the ref writes
+  let itemsEl = signal<HTMLDivElement | undefined>(undefined);
   const { dragIndex, dropIndex, handlers } = createDragReorder(
     () => itemsEl,
     (from, to) => {
@@ -40,7 +42,7 @@ export const NodesList: Component<NodesListProps> = (props) => {
     },
   );
 
-  // the arrow defers the props read to selection time (not a reactive scope)
+  // props.onSelect is read when a node is added, not when the menu renders
   const addNode = useAddNode((uid) => props.onSelect(uid));
   const toggleEnabled = useToggleEnabled();
 
@@ -55,14 +57,14 @@ export const NodesList: Component<NodesListProps> = (props) => {
         </h2>
         <AddNode onAdd={addNode} />
       </header>
-      <div class={styles.items} ref={itemsEl}>
+      <div class={styles.items} ref={(el) => (itemsEl = el)}>
         <For each={nodes}>
           {(node, index) => (
             <>
               <div
                 class={{
                   [styles.dropPlaceholder]: true,
-                  [styles.visible]: dropIndex() === index(),
+                  [styles.visible]: dropIndex() === index,
                 }}
               />
               <div
@@ -70,8 +72,8 @@ export const NodesList: Component<NodesListProps> = (props) => {
                 data-flip-key={node.uid}
                 class={{
                   [styles.item]: true,
-                  [styles.active]: props.isSelected[node.uid] === true,
-                  [styles.dragging]: dragIndex() === index(),
+                  [styles.active]: props.isSelected(node.uid),
+                  [styles.dragging]: dragIndex() === index,
                 }}
                 onClick={() => props.onSelect(node.uid)}
                 // The whole row drags: the grip icon cost a slot in every row
@@ -82,7 +84,7 @@ export const NodesList: Component<NodesListProps> = (props) => {
                 title={t("chrome.reorderNamed", {
                   name: node.name ?? nodeLabel(node.type),
                 })}
-                {...handlers(index())}
+                {...handlers(index)}
               >
                 <UiSwitch
                   checked={node.enabled !== false}

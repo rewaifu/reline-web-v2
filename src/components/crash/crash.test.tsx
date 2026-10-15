@@ -1,18 +1,12 @@
-import { render as mount } from "@solidjs/web";
-import {
-  createErrorBoundary,
-  createSignal,
-  flush,
-  type Component,
-} from "solid-js";
+import { cleanup, mount, tick } from "@rezejs/testing-library";
+import { signal, type Component } from "reze-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STORAGE_KEY } from "~/constants";
 import { setLocale } from "~/lib/i18n";
+import { Errored } from "../errored/errored";
 import { Crash, clearStoredNodes } from "./crash";
 
-/** Solid 2 halts the *whole* reactive system on an uncaught error, so one
- * throwing computation used to freeze every input on the page and say nothing.
- * These tests pin what the boundary promises instead: the error lands in the
+/** One throwing subtree must cost only itself: the error lands in the
  * fallback, the rest of the tree keeps reacting, and the screen offers the two
  * actions that actually recover — reload, or drop the saved tree and reload. */
 
@@ -20,45 +14,37 @@ const Boom: Component = () => {
   throw new Error("boom in a node form");
 };
 
-/** The boundary is created *inside* the render root on purpose — one created
- * outside a reactive owner warns `[NO_OWNER_BOUNDARY]`; `App.tsx` builds its
- * boundary in the component body for the same reason. */
-const withBoundary = (child: () => unknown, outside: () => unknown) => {
-  const view = createErrorBoundary(child, (error) => <Crash error={error} />);
-  return [outside(), view()] as unknown as Element;
-};
+afterEach(cleanup);
 
 describe("workspace error boundary", () => {
   beforeEach(() => setLocale("ru"));
 
   it("shows the failure and leaves the reactive system alive", () => {
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-    const [count, setCount] = createSignal(0);
-    mount(
-      () =>
-        withBoundary(
-          () => <Boom />,
-          () => <p id="outside">{String(count())}</p>,
-        ),
-      host,
-    );
-    flush();
+    let count = signal(0);
+    const view = mount(() => (
+      <>
+        <p id="outside">{String(count)}</p>
+        <Errored fallback={(error) => <Crash error={error} />}>
+          <Boom />
+        </Errored>
+      </>
+    ));
+    tick();
 
     // the failure is on screen, with the stack that makes it fixable
-    const alert = host.querySelector('[role="alert"]');
+    const alert = view.el.querySelector('[role="alert"]');
     expect(alert?.textContent).toContain("Интерфейс сломался");
     expect(alert?.textContent).toContain("boom in a node form");
 
     // the point of the boundary: updates outside it still reach the DOM
-    expect(host.querySelector("#outside")?.textContent).toBe("0");
-    setCount(1);
-    flush();
-    expect(host.querySelector("#outside")?.textContent).toBe("1");
+    expect(view.el.querySelector("#outside")?.textContent).toBe("0");
+    count = 1;
+    tick();
+    expect(view.el.querySelector("#outside")?.textContent).toBe("1");
 
-    // recovery is offered, and it is not a button that cannot work: a boundary
-    // reset does not resurrect a component that threw on its own state
-    const labels = [...host.querySelectorAll("button")].map((b) =>
+    // recovery is offered, and it is not a button that cannot work: a reset
+    // does not resurrect a component that threw on its own state
+    const labels = [...view.el.querySelectorAll("button")].map((b) =>
       b.textContent?.trim(),
     );
     expect(labels).toEqual([

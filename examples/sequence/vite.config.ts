@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import solid from "@solidjs/vite-plugin";
+import reze from "@rezejs/vite-plugin";
 import { defineConfig } from "vite";
 import { relinePlugin } from "../../sdk/vite";
 import { manifest } from "./manifest";
@@ -15,7 +15,7 @@ export default defineConfig({
       ),
     },
   },
-  plugins: [relinePlugin({ manifest, entryName: "sequence.js" }), solid()],
+  plugins: [relinePlugin({ manifest, entryName: "sequence.js" }), reze()],
   build: {
     outDir: fileURLToPath(
       new URL("../../public/plugins/sequence", import.meta.url),

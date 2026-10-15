@@ -2,19 +2,20 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Plugin } from "vite";
+import { PLUGIN_API_VERSION } from "../src/lib/plugins/manifest";
 import hostExports from "./host-exports.json" with { type: "json" };
 
 /**
  * Vite helper for building a Reline plugin.
  *
- *   plugins: [relinePlugin({ manifest }), solid()]
+ *   plugins: [relinePlugin({ manifest }), reze()]
  *
  * It does two things the plugin cannot do for itself:
  *
- * 1. `solid-js` and `@solidjs/web` are not bundled. Imports of them become
+ * 1. `reze-js` and its internal entries are not bundled. Imports of them become
  *    reads from `globalThis.__RELINE__`, the host's own copies — two copies of
- *    the reactive core do not talk to each other, so a component built on its
- *    own Solid would never update the host's page.
+ *    the reactive graph do not see each other, so a component built on its own
+ *    Reze would never update the host's page.
  * 2. After the bundle is written it hashes the entry and writes `plugin.json`
  *    next to it with the entry name and the SHA-384 pin, which is what the host
  *    checks before it runs a byte of the code.
@@ -36,23 +37,27 @@ export interface RelinePluginOptions {
   entryName?: string;
 }
 
-const SHIMS: Record<string, "solid" | "web"> = {
-  "solid-js": "solid",
-  "@solidjs/web": "web",
-};
+const HOST_MODULES = [
+  "reze-js",
+  "reze-js/internal/reactivity",
+  "reze-js/internal/runtime",
+  "reze-js/jsx-runtime",
+] as const;
 
-const shimFor = (specifier: "solid-js" | "@solidjs/web"): string => {
-  const key = SHIMS[specifier];
-  const names = hostExports[specifier];
-  // `const x = host.solid.x` per name: a plugin imports names, and an ES module
-  // needs them declared statically
-  return [
-    `const host = globalThis.__RELINE__?.${key};`,
+type HostModule = (typeof HOST_MODULES)[number];
+
+const isHostModule = (source: string): source is HostModule =>
+  HOST_MODULES.some((module) => module === source);
+
+const shimFor = (specifier: HostModule): string =>
+  [
+    `const host = globalThis.__RELINE__?.[${JSON.stringify(specifier)}];`,
     `if (host === undefined) throw new Error("Reline host not found: this plugin must be loaded by Reline");`,
-    ...names.map((name) => `export const ${name} = host.${name};`),
+    // `export const x = host.x` per name: a plugin imports names, and an ES
+    // module needs them declared statically
+    ...hostExports[specifier].map((name) => `export const ${name} = host.${name};`),
     "export default host;",
   ].join("\n");
-};
 
 export const relinePlugin = (options: RelinePluginOptions): Plugin[] => {
   const virtual = (specifier: string) => `\0reline-host:${specifier}`;
@@ -64,12 +69,11 @@ export const relinePlugin = (options: RelinePluginOptions): Plugin[] => {
       name: "reline-plugin:host-externals",
       enforce: "pre",
       resolveId(source) {
-        return source in SHIMS ? virtual(source) : null;
+        return isHostModule(source) ? virtual(source) : null;
       },
       load(id) {
-        for (const specifier of Object.keys(SHIMS))
-          if (id === virtual(specifier))
-            return shimFor(specifier as "solid-js" | "@solidjs/web");
+        for (const specifier of HOST_MODULES)
+          if (id === virtual(specifier)) return shimFor(specifier);
         return null;
       },
     },
@@ -110,7 +114,7 @@ export const relinePlugin = (options: RelinePluginOptions): Plugin[] => {
               id: manifest.id,
               name: manifest.name,
               version: manifest.version,
-              api: 1,
+              api: PLUGIN_API_VERSION,
               description: manifest.description,
               descriptions: manifest.descriptions,
               entry: entry.fileName,

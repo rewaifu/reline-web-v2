@@ -1,6 +1,4 @@
-import type { Accessor, Component, Store } from "solid-js";
-import * as solid from "solid-js";
-import * as web from "@solidjs/web";
+import type { Component } from "~/types/component";
 import type { ActionReducer } from "~/context/actions";
 import { onStoreAction, storeActions } from "~/context/actions";
 import { dispatchAction, stackNodes } from "~/context/store-bridge";
@@ -117,7 +115,7 @@ export interface PipelineApi {
 
 export interface StoreApi {
   /** The live stack. Reads inside a component or effect are reactive. */
-  nodes(): Store<StackNode[]>;
+  nodes(): StackNode[];
   dispatch(action: AnyAction): void;
   /** Define an action. `type` must be `<id>:<name>`. */
   action(type: string, reducer: ActionReducer): Dispose;
@@ -167,8 +165,8 @@ export interface RunApi {
   /** Start a run and wait for how it ends. Rejects when one is already going. */
   start(config: PureConfig): Promise<RunOutcome>;
   stop(): void;
-  phase: Accessor<RunPhase>;
-  progress: Accessor<RunProgress | undefined>;
+  phase: () => RunPhase;
+  progress: () => RunProgress | undefined;
   endpoint(): string;
   onFinish(listener: (outcome: RunOutcome) => void): Dispose;
 }
@@ -188,9 +186,6 @@ export interface PluginApi {
   readonly id: string;
   readonly version: string;
   readonly apiVersion: typeof PLUGIN_API_VERSION;
-  /** The host's own copies of Solid — a plugin must use these, never its own. */
-  readonly solid: typeof solid;
-  readonly web: typeof web;
   /** A line in the plugin's log (shown in the Plugins tab). */
   log(...parts: unknown[]): void;
   /** Run `fn` when the plugin is switched off. */
@@ -293,8 +288,6 @@ export const createPluginApi = (scope: PluginScope): PluginApi => {
     id,
     version: manifest.version,
     apiVersion: PLUGIN_API_VERSION,
-    solid,
-    web,
     log: (...parts) => scope.log(parts.map(describe).join(" ")),
     onDispose: (fn) => scope.own(fn),
   };

@@ -1,16 +1,15 @@
 import {
-  type Component,
-  createEffect,
-  createMemo,
-  createSignal,
-  untrack,
+  computed,
+  effect,
   Show,
+  signal,
   useContext,
-} from "solid-js";
+} from "reze-js";
 import { parse, render } from "sugar-high/core";
 import * as json from "sugar-high/lang/json";
 import { AnalysisContext, NodesDispatchContext } from "~/context/contexts";
 import { NodesActionType } from "~/types/actions";
+import type { Component } from "~/types/component";
 import { allPresets, getPresetByName } from "~/lib/presets";
 import { stringToNodes } from "~/lib/config";
 import { modelUrl, preloadModelNames } from "~/lib/model-db";
@@ -22,15 +21,12 @@ import styles from "../config-panel.module.scss";
 /** Pipeline JSON, tokenized by sugar-high's JSON grammar (lang entry only —
  * the full registry would pull in every language for one format). */
 const HighlightedJson: Component<{ code: string }> = (props) => {
-  const html = createMemo(() => render(parse(props.code, json)));
+  const html = computed(render(parse(props.code, json)));
   return (
     <pre class={styles.codeView}>
-      {
-        // sugar-high escapes the source (`<` → `&lt;`) and the input is our
-        // own pretty-printed config, so the generated markup is safe here.
-        // oxlint-disable-next-line solid/no-innerhtml -- escaped local output
-        <code innerHTML={html()} />
-      }
+      {/* sugar-high escapes the source (`<` → `&lt;`) and the input is our
+       * own pretty-printed config, so the generated markup is safe here. */}
+      <code innerHTML={html} />
     </pre>
   );
 };
@@ -42,21 +38,21 @@ const CodeEditor: Component<{
   value: string;
   onInput: (value: string) => void;
 }> = (props) => {
-  let area!: HTMLTextAreaElement;
-  createEffect(
-    () => props.value,
-    () => {
-      // grow the field to its content (0 first: a shrinking box would only
-      // report its own height back) so the shell scrolls, not the field
-      area.style.height = "0px";
-      area.style.height = `${area.scrollHeight}px`;
-    },
-  );
+  let area = signal<HTMLTextAreaElement | undefined>(undefined);
+  effect(() => {
+    const el = area;
+    const text = props.value;
+    if (el === undefined || typeof text !== "string") return;
+    // grow the field to its content (0 first: a shrinking box would only
+    // report its own height back) so the shell scrolls, not the field
+    el.style.height = "0px";
+    el.style.height = `${el.scrollHeight}px`;
+  });
   return (
     <div class={styles.codeStack}>
       <HighlightedJson code={props.value} />
       <textarea
-        ref={area}
+        ref={(el) => (area = el)}
         class={styles.codeInput}
         value={props.value}
         onInput={(e) => props.onInput(e.currentTarget.value)}
@@ -111,18 +107,15 @@ const legacyNotice = (
 export const CodeTab: Component = () => {
   const dispatch = useContext(NodesDispatchContext);
   // one-time snapshot: the select below reads allPresets() reactively
-  const [presetName, setPresetName] = createSignal(
-    untrack(() => allPresets()[0]?.name ?? ""),
-  );
-  const [copied, setCopied] = createSignal(false);
-  const [editing, setEditing] = createSignal(false);
-  const [draft, setDraft] = createSignal("");
+  let presetName = signal(allPresets()[0]?.name ?? "");
+  let copied = signal(false);
+  let editing = signal(false);
+  let draft = signal("");
   // parts, not a string: the line re-renders in the current language, and an
   // import can produce two of them (what happened — what it rewrote)
-  const [status, setStatus] = createSignal<{
-    ok: boolean;
-    parts: LocalText[];
-  }>();
+  let status = signal<{ ok: boolean; parts: LocalText[] } | undefined>(
+    undefined,
+  );
 
   // the app-wide analysis: the same text the run sends, and the report of a
   // node that could not be built — it must show next to the code too
@@ -134,15 +127,15 @@ export const CodeTab: Component = () => {
   const applyPreset = (name: string) => {
     const preset = getPresetByName(name);
     if (!preset) return;
-    setPresetName(name);
+    presetName = name;
     dispatch({
       type: NodesActionType.IMPORT,
       payload: preset.nodes.map((n) => structuredClone(n)),
     });
-    setStatus({
+    status = {
       ok: true,
       parts: [message("panel.status.presetApplied", { name: preset.name })],
-    });
+    };
   };
 
   /** Parses and dispatches a config, migrating the pre-preprocess format on
@@ -164,24 +157,24 @@ export const CodeTab: Component = () => {
         },
       });
       dispatch({ type: NodesActionType.IMPORT, payload: parsed });
-      setEditing(false);
-      setStatus({ ok: true, parts: success(migration) });
+      editing = false;
+      status = { ok: true, parts: success(migration) };
     } catch (err) {
-      setStatus({
+      status = {
         ok: false,
         parts: [
           message("panel.status.invalidJson", {
             detail: err instanceof Error ? err.message : String(err),
           }),
         ],
-      });
+      };
     }
   };
 
   const startEdit = () => {
-    setDraft(code());
-    setStatus(undefined);
-    setEditing(true);
+    draft = code();
+    status = undefined;
+    editing = true;
   };
 
   /** The status line: what happened, then what the import rewrote. */
@@ -194,7 +187,7 @@ export const CodeTab: Component = () => {
   };
 
   const applyDraft = () =>
-    importConfig(draft(), (migration) =>
+    importConfig(draft, (migration) =>
       statusParts("panel.status.applied", migration),
     );
 
@@ -209,8 +202,8 @@ export const CodeTab: Component = () => {
   const copyCode = () => {
     navigator.clipboard.writeText(code()).then(
       () => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        copied = true;
+        setTimeout(() => (copied = false), 2000);
       },
       (err) => console.error("Copy failed", err),
     );
@@ -234,14 +227,14 @@ export const CodeTab: Component = () => {
           <UiSelect
             class={styles.presetTrigger}
             ariaLabel={t("panel.presets.aria")}
-            value={presetName()}
+            value={presetName}
             items={allPresets().map((p) => p.name)}
             onChange={applyPreset}
           />
         </div>
         <div class={styles.actions}>
           <Show
-            when={!editing()}
+            when={!editing}
             fallback={
               <>
                 <button
@@ -258,7 +251,7 @@ export const CodeTab: Component = () => {
                   class={styles.action}
                   aria-label={t("panel.code.cancel")}
                   title={t("panel.code.cancel")}
-                  onClick={() => setEditing(false)}
+                  onClick={() => (editing = false)}
                 >
                   <Icon name="x" size={16} />
                 </button>
@@ -299,7 +292,7 @@ export const CodeTab: Component = () => {
             title={t("panel.code.copy")}
             onClick={copyCode}
           >
-            {copied() ? (
+            {copied ? (
               <Icon name="check" size={16} />
             ) : (
               <Icon name="copy" size={16} />
@@ -317,7 +310,7 @@ export const CodeTab: Component = () => {
         </div>
       </div>
       <Show
-        when={editing()}
+        when={editing}
         fallback={
           <div class={styles.codeShell}>
             <HighlightedJson code={code()} />
@@ -325,7 +318,7 @@ export const CodeTab: Component = () => {
         }
       >
         <div class={styles.codeShell}>
-          <CodeEditor value={draft()} onInput={setDraft} />
+          <CodeEditor value={draft} onInput={(v) => (draft = v)} />
         </div>
       </Show>
       <Show when={convertFailures().length > 0}>
@@ -337,16 +330,16 @@ export const CodeTab: Component = () => {
           })}
         </p>
       </Show>
-      <Show when={status()}>
+      <Show when={status}>
         {(s) => (
           <p
             class={{
               [styles.status]: true,
-              [styles.ok]: s().ok,
-              [styles.err]: !s().ok,
+              [styles.ok]: s.ok,
+              [styles.err]: !s.ok,
             }}
           >
-            {s().parts.map(localText).join(" — ")}
+            {s.parts.map(localText).join(" — ")}
           </p>
         )}
       </Show>

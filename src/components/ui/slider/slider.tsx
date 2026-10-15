@@ -1,4 +1,4 @@
-import { omit, type Component } from "solid-js";
+import { omitProps, type Component } from "reze-js";
 import styles from "./slider.module.scss";
 
 export interface UiSliderProps {
@@ -16,8 +16,7 @@ export interface UiSliderProps {
  * paints the progress up to the thumb on WebKit (Firefox has
  * ::-moz-range-progress). */
 export const UiSlider: Component<UiSliderProps> = (props) => {
-  const rest = omit(
-    props,
+  const rest = omitProps(props, [
     "onChange",
     "value",
     "min",
@@ -25,10 +24,7 @@ export const UiSlider: Component<UiSliderProps> = (props) => {
     "step",
     "id",
     "class",
-  );
-  const min = () => props.min ?? 0;
-  const max = () => props.max ?? 100;
-  const fill = () => ((props.value - min()) / Math.max(1, max() - min())) * 100;
+  ]);
 
   return (
     <input
@@ -36,11 +32,13 @@ export const UiSlider: Component<UiSliderProps> = (props) => {
       id={props.id}
       class={[styles.slider, props.class]}
       type="range"
-      min={min()}
-      max={max()}
+      min={props.min ?? 0}
+      max={props.max ?? 100}
       step={props.step ?? 1}
       value={props.value}
-      style={{ "--fill": `${fill()}%` }}
+      style={{
+        "--fill": `${((props.value - (props.min ?? 0)) / Math.max(1, (props.max ?? 100) - (props.min ?? 0))) * 100}%`,
+      }}
       onInput={(e) => props.onChange(Number(e.currentTarget.value))}
     />
   );

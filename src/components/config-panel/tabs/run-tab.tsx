@@ -1,10 +1,11 @@
-import { type Component, createEffect, For, Show, useContext } from "solid-js";
+import { effect, For, Show, signal, useContext } from "reze-js";
 import {
   AnalysisContext,
   NodesContext,
   NodesDispatchContext,
 } from "~/context/contexts";
 import { NodesActionType } from "~/types/actions";
+import type { Component } from "~/types/component";
 import { analyze } from "~/lib/config";
 import { pipeline } from "~/lib/pipeline";
 import { DiagnosticList } from "~/components/diagnostics/diagnostic-list";
@@ -41,17 +42,15 @@ export const RunTab: Component = () => {
   // server (WS_API.md) and the client re-attaches by run_id
   const run = runClient;
   const analysis = useContext(AnalysisContext);
-  let logEl: HTMLDivElement | undefined;
+  let logEl = signal<HTMLDivElement | undefined>(undefined);
 
   // The journal is the only record a failed run leaves behind, so it follows
   // its newest line: a line the user has to scroll for is a line they miss.
-  createEffect(
-    () => run.messages().length,
-    () => {
-      if (logEl === undefined) return;
-      logEl.scrollTop = logEl.scrollHeight;
-    },
-  );
+  effect(() => {
+    const el = logEl;
+    if (el === undefined || run.messages().length === 0) return;
+    el.scrollTop = el.scrollHeight;
+  });
 
   const connect = async () => {
     const url = endpoint().trim();
@@ -212,7 +211,7 @@ export const RunTab: Component = () => {
             [styles.runBar]: true,
             [styles.runBarIndeterminate]: indeterminate(),
           }}
-          role="progressbar"
+          attr:role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={run.progress()?.percent ?? 0}
@@ -226,7 +225,7 @@ export const RunTab: Component = () => {
         <p class={styles.runStage}>{stageText()}</p>
         <Show when={chips().length > 0}>
           <div class={styles.runMetrics}>
-            <For each={chips()}>
+            <For each={chips()} keyed={false}>
               {(chip) => <span class={styles.runChip}>{chip}</span>}
             </For>
           </div>
@@ -245,7 +244,7 @@ export const RunTab: Component = () => {
               <Icon name="x" size={13} />
             </button>
           </div>
-          <div class={styles.runLog} ref={logEl}>
+          <div class={styles.runLog} ref={(el) => (logEl = el)}>
             <For each={run.messages()}>
               {(message) => (
                 <p class={[styles.runLogLine, LOG_LINE_CLASS[message.kind]]}>

@@ -1,6 +1,6 @@
-import { fireEvent, render } from "@solidjs/testing-library";
-import { createMemo, createStore } from "solid-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fire, mount } from "@rezejs/testing-library";
+import { store } from "reze-js";
 import {
   AnalysisContext,
   NodesContext,
@@ -37,37 +37,54 @@ vi.mock("~/lib/ls-client", () => ({
  * dictionary key, so the query follows a language switch too. */
 const pathField = () => t("form.folder_reader.path");
 
-const makeStore = () => createStore(createDefaultNodes());
+/** Input associated with a `<label>` whose text matches (via `for`/`id`). */
+const labelledInput = (root: HTMLElement, text: string) => {
+  const label = Array.from(root.querySelectorAll("label")).find(
+    (el) => el.textContent.trim() === text,
+  );
+  if (label === undefined) throw new Error(`no label "${text}"`);
+  return document.getElementById(label.htmlFor) as HTMLInputElement;
+};
+
+const byLabel = (root: HTMLElement, text: string) =>
+  Array.from(root.querySelectorAll<HTMLElement>(`[aria-label="${text}"]`));
+
+/** Leaf element whose text is exactly `text`. */
+const byText = (root: HTMLElement, text: string) => {
+  const hit = Array.from(root.querySelectorAll<HTMLElement>("*")).find(
+    (el) => el.children.length === 0 && el.textContent.trim() === text,
+  );
+  if (hit === undefined) throw new Error(`no text "${text}"`);
+  return hit;
+};
 
 describe("path field under the node store", () => {
-  let store: ReturnType<typeof makeStore>;
+  let nodes = store(createDefaultNodes());
 
   beforeEach(() => {
-    store = makeStore();
+    nodes = store(createDefaultNodes());
     // the folder reader is the first node; its form only renders expanded
-    store[1]((state) => {
-      state[0].collapsed = false;
-    });
+    nodes[0].collapsed = false;
   });
 
-  const readerPath = () =>
-    (store[0][0].options as FolderReaderNodeOptions).path;
+  afterEach(cleanup);
 
-  const mount = () => {
-    const dispatch = createNodesDispatch(store[1]);
-    const [selected, setSelected] = createStore<Record<string, boolean>>({});
-    setSelected((state) => {
-      state[store[0][0].uid] = true;
-    });
-    return render(() => {
-      const analysis = createMemo(() => analyze([...store[0]]));
+  const readerPath = () => (nodes[0].options as FolderReaderNodeOptions).path;
+
+  const mountStack = (
+    selectedUid: () => string | null,
+    isSelected: (uid: string) => boolean,
+  ) => {
+    const dispatch = createNodesDispatch(nodes);
+    return mount(() => {
+      const analysis = () => analyze([...nodes]);
       return (
-        <NodesContext value={store[0]}>
+        <NodesContext value={nodes}>
           <NodesDispatchContext value={dispatch}>
             <AnalysisContext value={analysis}>
               <NodeStack
-                selectedUid={() => store[0][0].uid}
-                isSelected={selected}
+                selectedUid={selectedUid}
+                isSelected={isSelected}
                 onSelect={() => {}}
                 phone={false}
               />
@@ -79,16 +96,19 @@ describe("path field under the node store", () => {
   };
 
   it("keeps the same input element while its options change", async () => {
-    const view = mount();
-    const input = view.getByLabelText(pathField()) as HTMLInputElement;
-    const before = input;
+    const view = mountStack(
+      () => nodes[0].uid,
+      (uid) => uid === nodes[0].uid,
+    );
+    const before = labelledInput(view.el, pathField());
     before.focus();
     expect(document.activeElement).toBe(before);
 
-    fireEvent.input(before, { target: { value: "raws" } });
+    before.value = "raws";
+    fire(before, "input");
     await vi.waitFor(() => expect(readerPath()).toBe("raws"));
 
-    const after = view.getByLabelText(pathField()) as HTMLInputElement;
+    const after = labelledInput(view.el, pathField());
     // a remounted input would be a different node, unfocused, with the caret
     // parked at the end — the shape the bug report describes
     expect(after).toBe(before);
@@ -97,18 +117,23 @@ describe("path field under the node store", () => {
   });
 
   it("accepts an insertion at the start of the value", async () => {
-    const view = mount();
-    const input = view.getByLabelText(pathField()) as HTMLInputElement;
-    fireEvent.input(input, { target: { value: "src" } });
+    const view = mountStack(
+      () => nodes[0].uid,
+      (uid) => uid === nodes[0].uid,
+    );
+    const input = labelledInput(view.el, pathField());
+    input.value = "src";
+    fire(input, "input");
     await vi.waitFor(() => expect(readerPath()).toBe("src"));
 
     // the state the caret sits in when the user types at the beginning
     input.focus();
     input.setSelectionRange(0, 0);
-    fireEvent.input(input, { target: { value: "./src" } });
+    input.value = "./src";
+    fire(input, "input");
     await vi.waitFor(() => expect(readerPath()).toBe("./src"));
 
-    expect(view.getByLabelText(pathField())).toBe(input);
+    expect(labelledInput(view.el, pathField())).toBe(input);
     expect(input.value).toBe("./src");
     expect(document.activeElement).toBe(input);
   });
@@ -119,54 +144,44 @@ describe("path field under the node store", () => {
    * open. Double-click-to-rename was the other half of that history, and the
    * pencil button never needed a gesture beside it. */
   it("folds on the first click on the title, and leaves renaming to the pencil", async () => {
-    const view = mount();
-    const upscale = () => store[0][1];
+    const view = mountStack(
+      () => null,
+      () => false,
+    );
+    const upscale = () => nodes[1];
 
     // the upscale node starts collapsed: one click selects *and* folds
-    fireEvent.click(view.getByText(nodeLabel(NodeType.UPSCALE)));
+    fire(byText(view.el, nodeLabel(NodeType.UPSCALE)), "click");
     await vi.waitFor(() => expect(upscale().collapsed).toBe(false));
-    expect(view.queryAllByLabelText(t("chrome.nodeName"))).toHaveLength(0);
+    expect(byLabel(view.el, t("chrome.nodeName"))).toHaveLength(0);
 
     // and one more click folds it back — the first click always acts
-    fireEvent.click(view.getByText(nodeLabel(NodeType.UPSCALE)));
+    fire(byText(view.el, nodeLabel(NodeType.UPSCALE)), "click");
     await vi.waitFor(() => expect(upscale().collapsed).toBe(true));
 
     // the grip is a drag surface: a tap on it selects, but must not fold —
     // otherwise dropping a dragged card would fold the card that was dropped
-    const grips = view.getAllByLabelText(t("chrome.reorder"));
-    fireEvent.click(grips[1] as HTMLElement);
+    const grips = byLabel(view.el, t("chrome.reorder"));
+    fire(grips[1] as HTMLElement, "click");
     await vi.waitFor(() => expect(upscale().collapsed).toBe(true));
 
     // the pencil is the one way into renaming, and it still works
-    const pencils = view.getAllByLabelText(t("chrome.rename"));
-    fireEvent.click(pencils[1] as HTMLElement);
+    const pencils = byLabel(view.el, t("chrome.rename"));
+    fire(pencils[1] as HTMLElement, "click");
     await vi.waitFor(() =>
-      expect(view.getAllByLabelText(t("chrome.nodeName"))).toHaveLength(1),
+      expect(byLabel(view.el, t("chrome.nodeName"))).toHaveLength(1),
     );
   });
 
   it("marks a disabled node on its stack card", async () => {
-    const dispatch = createNodesDispatch(store[1]);
-    const [selected] = createStore<Record<string, boolean>>({});
-    const view = render(() => {
-      const analysis = createMemo(() => analyze([...store[0]]));
-      return (
-        <NodesContext value={store[0]}>
-          <NodesDispatchContext value={dispatch}>
-            <AnalysisContext value={analysis}>
-              <NodeStack
-                selectedUid={() => null}
-                isSelected={selected}
-                onSelect={() => {}}
-                phone={false}
-              />
-            </AnalysisContext>
-          </NodesDispatchContext>
-        </NodesContext>
-      );
-    });
-    const uid = store[0][1].uid;
-    const card = () => view.container.querySelector(`[data-node-id="${uid}"]`);
+    const dispatch = createNodesDispatch(nodes);
+    const view = mountStack(
+      () => null,
+      () => false,
+    );
+    const uid = nodes[1].uid;
+    const card = () =>
+      view.el.querySelector(`[data-node-id="${uid}"]`) as HTMLElement | null;
     expect(card()?.className).not.toMatch(/disabled/);
     dispatch({
       type: NodesActionType.CHANGE,

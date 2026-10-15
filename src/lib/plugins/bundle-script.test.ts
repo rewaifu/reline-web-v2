@@ -31,7 +31,7 @@ const plugin = (name: string, id: string, code = "export default {}") => {
       id,
       name,
       version: "1.0.0",
-      api: 1,
+      api: 2,
       entry: "index.js",
       caps: [],
       integrity: `sha384-${createHash("sha384").update(code).digest("base64")}`,

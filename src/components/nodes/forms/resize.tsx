@@ -1,5 +1,6 @@
 import type { StackNode } from "~/types/node";
-import { type Component, Show, createMemo } from "solid-js";
+import { Show } from "reze-js";
+import type { Component } from "~/types/component";
 import { FilterType, ResizeType } from "~/types/enums";
 import {
   useNodeForm,
@@ -28,7 +29,7 @@ const readStash = (): Partial<Record<ResizeSizeParam, number>> => {
 export const ResizeForm: Component<FormProps> = (props) => {
   const form = useNodeForm(() => props.node);
   const options = () => form.options() as ResizeNodeOptions;
-  const type = createMemo(() => options().resize_type);
+  const type = () => options().resize_type;
 
   const changeType = (next: ResizeType) => {
     const current = options();

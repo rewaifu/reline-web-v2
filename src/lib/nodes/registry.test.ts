@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createEffect, createRoot, flush } from "solid-js";
+import { effect, root } from "reze-js";
+import { tick } from "@rezejs/testing-library";
 import { raw } from "~/lib/i18n";
 import {
   createNode,
@@ -134,19 +135,16 @@ describe("nodeRegistry", () => {
 
   it("notifies a reader that is already mounted", () => {
     let seen = "";
-    const dispose = createRoot((stop) => {
-      createEffect(
-        () => nodeLabel("test.late"),
-        (label) => {
-          seen = label;
-        },
-      );
+    const dispose = root((stop) => {
+      effect(() => {
+        seen = nodeLabel("test.late");
+      });
       return stop;
     });
-    flush();
+    tick();
     expect(seen).toBe("test.late");
     keep(nodeRegistry.define(blur({ type: "test.late", label: raw("Late") })));
-    flush();
+    tick();
     expect(seen).toBe("Late");
     dispose();
   });

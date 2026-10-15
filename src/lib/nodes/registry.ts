@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { signal } from "reze-js";
 import { render } from "~/lib/i18n";
 import type { NodeDef } from "./types";
 
@@ -28,11 +28,13 @@ const effective = new Map<string, NodeDef>();
 let byPure = new Map<string, NodeDef>();
 
 // The Map answers immediately; the signal only tells subscribers to ask again.
-// `ownedWrite`: a plugin defines its types from inside its own reactive root,
-// and the registry is shared state, not that root's — the write is intended.
+// Writing it from inside a plugin's own effect is intended: the registry is
+// shared state, not that effect's.
 const definedListeners = new Set<(type: string) => void>();
-const [revision, setRevision] = createSignal(0, { ownedWrite: true });
-const changed = () => setRevision((n) => n + 1);
+let revision = signal(0);
+const changed = () => {
+  revision += 1;
+};
 
 const recompute = (type: string): void => {
   const base = bases.get(type);
@@ -52,7 +54,7 @@ const recompute = (type: string): void => {
 };
 
 const track = (): void => {
-  revision();
+  void revision;
 };
 
 const removeFrom = <T>(list: T[] | undefined, item: T): void => {

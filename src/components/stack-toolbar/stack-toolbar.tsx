@@ -1,4 +1,5 @@
-import { type Component, Show, useContext } from "solid-js";
+import { Show, useContext } from "reze-js";
+import type { Component } from "~/types/component";
 import { Icon } from "~/components/ui";
 import { AddNode } from "~/components/nodes-list/add-node-menu";
 import { Slot } from "~/components/slot/slot";
@@ -32,7 +33,7 @@ export interface StackToolbarProps {
 export const StackToolbar: Component<StackToolbarProps> = (props) => {
   const nodes = useContext(NodesContext);
   const dispatch = useContext(NodesDispatchContext);
-  // the arrow defers the props read to selection time (not a reactive scope)
+  // props.onSelect is read when a node is added, not when the toolbar renders
   const addNode = useAddNode((uid) => props.onSelect(uid));
   const enabledCount = () => nodes.filter((n) => n.enabled !== false).length;
   const anyOpen = () => nodes.some((n) => n.collapsed === false);

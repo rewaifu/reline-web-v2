@@ -1,4 +1,4 @@
-import { flush } from "solid-js";
+import { tick } from "@rezejs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { pipeline } from "~/lib/pipeline";
 import type { PureConfig } from "~/types/node";
@@ -17,9 +17,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Signal writes are deferred in Solid 2: settle them before reading. */
+/** Let pending reactive work run before reading the journal. */
 const failures = () => {
-  flush();
+  tick();
   return pipeline.failures();
 };
 

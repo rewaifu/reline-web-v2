@@ -1,6 +1,8 @@
-import { createRoot, createSignal } from "solid-js";
-import * as solid from "solid-js";
-import * as web from "@solidjs/web";
+import { root, signal } from "reze-js";
+import * as reze from "reze-js";
+import * as reactivity from "reze-js/internal/reactivity";
+import * as runtime from "reze-js/internal/runtime";
+import * as jsx from "reze-js/jsx-runtime";
 import * as v from "valibot";
 import { storage } from "~/lib/storage";
 import { pipeline } from "~/lib/pipeline/hooks";
@@ -59,52 +61,42 @@ const BOOT_KEY = "reline-web:plugins:booting";
 const ACTIVATE_TIMEOUT_MS = 5000;
 const MAX_LOG_LINES = 100;
 
-// `ownedWrite`: statuses change from activation, which runs inside the
-// plugin's own reactive root, and from event handlers alike
-const [statuses, setStatuses] = createSignal<ReadonlyMap<string, PluginStatus>>(
-  new Map(),
-  { ownedWrite: true },
-);
-const [logs, setLogs] = createSignal<ReadonlyMap<string, readonly LogLine[]>>(
-  new Map(),
-  { ownedWrite: true },
-);
-const [bootInfo, setBootInfo] = createSignal<{
+// Module-level state. Writes replace the value; reads see it at once. The
+// UI subscribes through the accessor functions exported below.
+let statuses = signal<ReadonlyMap<string, PluginStatus>>(new Map());
+let logs = signal<ReadonlyMap<string, readonly LogLine[]>>(new Map());
+let bootInfo = signal<{
   safeMode: boolean;
   /** Plugins switched off because the previous start did not come up healthy. */
   crashed: readonly string[];
-}>({ safeMode: false, crashed: [] }, { ownedWrite: true });
-const [bundleFailures, setBundleFailures] = createSignal<
-  readonly BundledFailure[]
->([], { ownedWrite: true });
-const [pendingInstall, setPendingInstall] = createSignal<string | undefined>(
-  undefined,
-  { ownedWrite: true },
-);
+}>({ safeMode: false, crashed: [] });
+let bundleFailures = signal<readonly BundledFailure[]>([]);
+let pendingInstall = signal<string | undefined>(undefined);
 
 const setStatus = (id: string, status: PluginStatus): void => {
-  setStatuses((all) => new Map(all).set(id, status));
+  statuses = new Map(statuses).set(id, status);
 };
 
 const appendLog = (id: string, text: string): void => {
-  setLogs((all) => {
-    const next = new Map(all);
-    next.set(
-      id,
-      [...(all.get(id) ?? []), { at: Date.now(), text }].slice(-MAX_LOG_LINES),
-    );
-    return next;
-  });
+  const next = new Map(logs);
+  next.set(
+    id,
+    [...(logs.get(id) ?? []), { at: Date.now(), text }].slice(-MAX_LOG_LINES),
+  );
+  logs = next;
 };
 
-/** The host's own Solid, for plugins built to take it from here rather than
- * bundle a second copy — two copies of the reactive core do not talk to each
- * other. Set before any plugin code runs. */
+/** The host's reactive runtime and JSX, handed to plugin code. A plugin built
+ * against these (the SDK externalises its imports of `reze-js` to this object)
+ * shares the host's reactive graph; a second copy would not see the host's
+ * signals. Set before any plugin code runs. */
 const exposeHost = (): void => {
   (globalThis as Record<string, unknown>).__RELINE__ = {
     apiVersion: PLUGIN_API_VERSION,
-    solid,
-    web,
+    "reze-js": reze,
+    "reze-js/internal/reactivity": reactivity,
+    "reze-js/internal/runtime": runtime,
+    "reze-js/jsx-runtime": jsx,
   };
 };
 exposeHost();
@@ -226,7 +218,7 @@ const activate = async (plugin: InstalledPlugin): Promise<void> => {
     });
     // the plugin's own reactive root: effects and memos its `activate` creates
     // belong to it and are disposed with it
-    const result = createRoot((dispose) => {
+    const result = root((dispose) => {
       rootDispose = dispose;
       return (run as (api: unknown) => unknown)(api);
     });
@@ -287,27 +279,27 @@ export interface InstallPreview extends ManifestCandidate {
   missing: string[];
 }
 
-let stalled = false;
-
 export const pluginRuntime = {
   status(id: string): PluginStatus {
-    return statuses().get(id) ?? { state: "off" };
+    return statuses.get(id) ?? { state: "off" };
   },
 
   log(id: string): readonly LogLine[] {
-    return logs().get(id) ?? [];
+    return logs.get(id) ?? [];
   },
 
   /** `?plugins=off` and plugins switched off after a failed start. Reactive. */
-  boot: bootInfo,
+  boot: () => bootInfo,
 
   /** What of the deployment's bundled plugins could not be read at start. */
-  bundleFailures,
+  bundleFailures: () => bundleFailures,
 
   /** A manifest URL from `?plugin=` that waits for the user to look at it. */
-  pendingInstall,
+  pendingInstall: () => pendingInstall,
 
-  clearPendingInstall: () => setPendingInstall(undefined),
+  clearPendingInstall: () => {
+    pendingInstall = undefined;
+  },
 
   /** Fetch a manifest and its code and say what installing it would do. Nothing
    * is stored and nothing runs. `pin`: the integrity a catalog entry vouches for. */
@@ -390,11 +382,9 @@ export const pluginRuntime = {
     if (pluginStore.get(id)?.bundled === true) return;
     deactivate(id);
     pluginStore.remove(id);
-    setStatuses((all) => {
-      const next = new Map(all);
-      next.delete(id);
-      return next;
-    });
+    const next = new Map(statuses);
+    next.delete(id);
+    statuses = next;
   },
 
   /** Start the enabled plugins. Honours safe mode, installs the deployment's
@@ -405,7 +395,7 @@ export const pluginRuntime = {
     const link = params.get("plugin");
     if (link !== null && link.trim() !== "") {
       // never installed on sight: the user is shown what it asks for first
-      setPendingInstall(link.trim());
+      pendingInstall = link.trim();
       params.delete("plugin");
       const rest = params.toString();
       window.history.replaceState(
@@ -415,11 +405,11 @@ export const pluginRuntime = {
       );
     }
     if (params.get("plugins") === "off") {
-      setBootInfo({ safeMode: true, crashed: [] });
+      bootInfo = { safeMode: true, crashed: [] };
       return;
     }
     // the deployment's own plugins, before the enabled ones are picked
-    setBundleFailures(await syncBundled());
+    bundleFailures = await syncBundled();
     // the previous start wrote this and never cleared it: the page died or
     // froze before it proved itself healthy, so what was starting is suspect
     const previous = storage.getJson(BOOT_KEY);
@@ -431,7 +421,7 @@ export const pluginRuntime = {
         if (pluginStore.get(id) !== undefined)
           pluginStore.patch(id, { enabled: false, disabledReason: "crash" });
       storage.remove(BOOT_KEY);
-      setBootInfo({ safeMode: false, crashed: suspects });
+      bootInfo = { safeMode: false, crashed: suspects };
     }
     const enabled = startOrder(pluginStore.list().filter((p) => p.enabled));
     if (enabled.length === 0) return;
@@ -440,9 +430,9 @@ export const pluginRuntime = {
       enabled.map((p) => p.manifest.id),
     );
     window.addEventListener("pagehide", () => {
-      // a page that is closing normally did not crash; one that froze has
-      // already been marked and keeps its flag for the next start
-      if (!stalled) storage.remove(BOOT_KEY);
+      // a page that is closing normally did not crash; one that froze never
+      // fires pagehide and keeps its flag for the next start
+      storage.remove(BOOT_KEY);
     });
     for (const plugin of enabled) await activate(plugin);
   },
@@ -451,11 +441,6 @@ export const pluginRuntime = {
    * started are not what stops it. */
   confirmHealthy(): void {
     storage.remove(BOOT_KEY);
-  },
-
-  /** The watchdog found the reactive system dead. */
-  markStalled(): void {
-    stalled = true;
   },
 
   /** Is anything enabled — the halt overlay offers the way out only then. */

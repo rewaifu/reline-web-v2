@@ -1,4 +1,4 @@
-import { useContext } from "solid-js";
+import { useContext } from "reze-js";
 import { NodesContext, NodesDispatchContext } from "~/context/contexts";
 import { createNode } from "~/lib/nodes";
 import { NodesActionType } from "~/types/actions";

@@ -1,12 +1,12 @@
 import {
   For,
   Show,
-  createEffect,
-  createMemo,
-  createSignal,
-  createStore,
+  computed,
+  effect,
+  signal,
+  store,
   untrack,
-} from "solid-js";
+} from "reze-js";
 import {
   definePlugin,
   type PluginApiFor,
@@ -159,7 +159,8 @@ export default definePlugin<
     api.i18n.add("ru", flatten(WORDS.ru));
     api.ui.styles(STYLES);
     // the editor's own controls: the panel looks like the tabs around it
-    const { Button, IconButton, Switch, Input, Icon } = api.ui.kit;
+    const { Button, IconButton, Input, Icon } = api.ui.kit;
+    const Toggle = api.ui.kit.Switch;
     const t = (key: string, params?: MessageParams) => api.i18n.t(key, params);
 
     // ── state ────────────────────────────────────────────────────────────
@@ -177,25 +178,23 @@ export default definePlugin<
         stopOnError: saved?.stopOnError ?? true,
       };
     };
-    const [state, setStore] = createStore<State>(restore());
-    const [problem, setProblem] = createSignal("");
-    const [running, setRunning] = createSignal(false);
-    const [position, setPosition] = createSignal({ at: 0, total: 0, name: "" });
+    const state = store<State>(restore());
+    let problem = signal("");
+    let running = signal(false);
+    let position = signal({ at: 0, total: 0, name: "" });
     let stopRequested = false;
 
     // Saving follows a counter, not the store: an effect that serialises the
     // whole store subscribes to every field of every step (a few thousand
     // sources for a long sequence) and re-runs on any of them.
-    const [revision, setRevision] = createSignal(0);
+    let revision = signal(0);
     const setState = (change: (draft: State) => void) => {
-      setStore(change);
-      setRevision((n) => n + 1);
+      change(state);
+      revision += 1;
     };
-    createEffect(revision, () => {
-      api.storage.set(
-        STORAGE_KEY,
-        untrack(() => JSON.stringify(state)),
-      );
+    effect(() => {
+      void revision;
+      untrack(() => api.storage.set(STORAGE_KEY, JSON.stringify(state)));
     });
 
     const stepAt = (id: string) => state.steps.findIndex((s) => s.id === id);
@@ -230,12 +229,12 @@ export default definePlugin<
       });
 
     const addCurrent = () => {
-      setProblem("");
+      problem = "";
       addStep(t("stepName", { n: state.steps.length + 1 }), snapshot());
     };
 
     const importFiles = async (files: FileList) => {
-      setProblem("");
+      problem = "";
       for (const file of Array.from(files)) {
         try {
           // read through the editor's own import, so a legacy or hand-written
@@ -246,12 +245,10 @@ export default definePlugin<
           ) as PureConfig;
           addStep(file.name.replace(/\.json$/i, ""), config);
         } catch (error) {
-          setProblem(
-            t("badFile", {
-              file: file.name,
-              detail: error instanceof Error ? error.message : String(error),
-            }),
-          );
+          problem = t("badFile", {
+            file: file.name,
+            detail: error instanceof Error ? error.message : String(error),
+          });
         }
       }
     };
@@ -273,29 +270,27 @@ export default definePlugin<
     const loadIntoEditor = (id: string) => {
       const step = state.steps[stepAt(id)];
       if (step === undefined) return;
-      setProblem("");
+      problem = "";
       try {
         api.config.replaceStack(api.config.fromPure(step.config));
       } catch (error) {
-        setProblem(
-          t("invalid", {
-            detail: error instanceof Error ? error.message : String(error),
-          }),
-        );
+        problem = t("invalid", {
+          detail: error instanceof Error ? error.message : String(error),
+        });
       }
     };
 
     // ── running ──────────────────────────────────────────────────────────
     const runSequence = async () => {
-      if (running()) return;
+      if (running) return;
       const queue = state.steps.filter((s) => s.enabled).map((s) => s.id);
       if (queue.length === 0) {
-        setProblem(t("nothing"));
+        problem = t("nothing");
         return;
       }
-      setProblem("");
+      problem = "";
       stopRequested = false;
-      setRunning(true);
+      running = true;
       for (const id of queue) patchStep(id, { status: "pending", note: "" });
       let finished = 0;
       try {
@@ -303,7 +298,7 @@ export default definePlugin<
           if (stopRequested) break;
           const step = state.steps[stepAt(id)];
           if (step === undefined) continue;
-          setPosition({ at: index + 1, total: queue.length, name: step.name });
+          position = { at: index + 1, total: queue.length, name: step.name };
           patchStep(id, { status: "running" });
 
           // the editor's own checks, on the step's config, right before it runs
@@ -360,8 +355,8 @@ export default definePlugin<
           }
         }
       } finally {
-        setRunning(false);
-        setProblem(t("done", { ok: finished, total: queue.length }));
+        running = false;
+        problem = t("done", { ok: finished, total: queue.length });
       }
     };
 
@@ -381,7 +376,7 @@ export default definePlugin<
     };
 
     const StepRow = (props: { step: Step; index: number }) => {
-      const summary = createMemo(() => summarize(props.step.config));
+      const summary = computed(summarize(props.step.config));
       return (
         <li
           class="rsq-step"
@@ -389,7 +384,7 @@ export default definePlugin<
           data-off={props.step.enabled ? undefined : ""}
         >
           <div class="rsq-head">
-            <Switch
+            <Toggle
               checked={props.step.enabled}
               onChange={(enabled) => patchStep(props.step.id, { enabled })}
               ariaLabel={t("enable", { name: props.step.name })}
@@ -398,7 +393,7 @@ export default definePlugin<
               class="rsq-name"
               value={props.step.name}
               aria-label={t("name")}
-              disabled={running()}
+              disabled={running}
               onInput={(e) =>
                 patchStep(props.step.id, { name: e.currentTarget.value })
               }
@@ -406,45 +401,42 @@ export default definePlugin<
             <span class="rsq-status">{t(`status.${props.step.status}`)}</span>
           </div>
           <div class="rsq-tools">
-            <p
-              class="rsq-meta"
-              data-bad={summary().errors > 0 ? "" : undefined}
-            >
-              {t("nodes", { count: summary().nodes })}
-              <Show when={summary().errors > 0}>
+            <p class="rsq-meta" data-bad={summary.errors > 0 ? "" : undefined}>
+              {t("nodes", { count: summary.nodes })}
+              <Show when={summary.errors > 0}>
                 {" · "}
-                {t("errors", { count: summary().errors })}
+                {t("errors", { count: summary.errors })}
               </Show>
             </p>
             <div class="rsq-buttons">
               <IconButton
                 icon="arrow-up"
                 label={t("up")}
-                disabled={running() || props.index === 0}
+                disabled={running || props.index === 0}
                 onClick={() => move(props.step.id, -1)}
               />
               <IconButton
                 icon="arrow-down"
                 label={t("down")}
-                disabled={running() || props.index === state.steps.length - 1}
+                disabled={running || props.index === state.steps.length - 1}
                 onClick={() => move(props.step.id, 1)}
               />
               <IconButton
                 icon="pencil"
                 label={t("load")}
-                disabled={running()}
+                disabled={running}
                 onClick={() => loadIntoEditor(props.step.id)}
               />
               <IconButton
                 icon="refresh"
                 label={t("update")}
-                disabled={running()}
+                disabled={running}
                 onClick={() => patchStep(props.step.id, { config: snapshot() })}
               />
               <IconButton
                 icon="trash"
                 label={t("remove")}
-                disabled={running()}
+                disabled={running}
                 onClick={() => remove(props.step.id)}
               />
             </div>
@@ -461,11 +453,11 @@ export default definePlugin<
       return (
         <div class="rsq">
           <div class="rsq-actions">
-            <Button disabled={running()} onClick={addCurrent}>
+            <Button disabled={running} onClick={addCurrent}>
               <Icon name="plus" size={14} />
               {t("addCurrent")}
             </Button>
-            <Button disabled={running()} onClick={() => picker?.click()}>
+            <Button disabled={running} onClick={() => picker?.click()}>
               <Icon name="upload" size={14} />
               {t("importFiles")}
             </Button>
@@ -489,12 +481,12 @@ export default definePlugin<
           >
             <ul class="rsq-list">
               <For each={state.steps}>
-                {(step, index) => <StepRow step={step} index={index()} />}
+                {(step, index) => <StepRow step={step} index={index} />}
               </For>
             </ul>
           </Show>
 
-          <Switch
+          <Toggle
             checked={state.stopOnError}
             onChange={(stopOnError) =>
               setState((draft) => {
@@ -507,30 +499,30 @@ export default definePlugin<
           <div class="rsq-actions">
             <Button
               variant="primary"
-              disabled={running() || state.steps.length === 0}
+              disabled={running || state.steps.length === 0}
               onClick={() => void runSequence()}
             >
               <Icon name="play" size={14} />
               {t("run")}
             </Button>
-            <Button disabled={!running()} onClick={stop}>
+            <Button disabled={!running} onClick={stop}>
               <Icon name="stop" size={14} />
               {t("stop")}
             </Button>
           </div>
 
-          <Show when={running()}>
-            <p class="rsq-progress" role="status">
+          <Show when={running}>
+            <p class="rsq-progress" attr:role="status">
               {t("stepOf", {
-                n: position().at,
-                total: position().total,
-                name: position().name,
+                n: position.at,
+                total: position.total,
+                name: position.name,
               })}
             </p>
           </Show>
-          <Show when={problem() !== ""}>
-            <p class="rsq-err" role="alert">
-              {problem()}
+          <Show when={problem !== ""}>
+            <p class="rsq-err" attr:role="alert">
+              {problem}
             </p>
           </Show>
         </div>
@@ -546,9 +538,9 @@ export default definePlugin<
 
     // a badge in the top bar while a sequence runs, so it is visible from any tab
     api.ui.slot("topbar", () => (
-      <Show when={running()}>
-        <span class="rsq-badge" role="status">
-          {t("badge", { done: position().at, total: position().total })}
+      <Show when={running}>
+        <span class="rsq-badge" attr:role="status">
+          {t("badge", { done: position.at, total: position.total })}
         </span>
       </Show>
     ));

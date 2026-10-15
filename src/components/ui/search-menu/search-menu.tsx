@@ -1,12 +1,12 @@
 import {
   For,
+  Portal,
   Show,
-  createMemo,
-  createSignal,
+  computed,
   createUniqueId,
+  signal,
   type Component,
-} from "solid-js";
-import { Portal } from "@solidjs/web";
+} from "reze-js";
 import { t } from "~/lib/i18n";
 import { UiIconButton } from "../button/button";
 import { createDismissOnOutside } from "../create-dismiss-on-outside";
@@ -34,18 +34,22 @@ export interface UiSearchMenuProps {
  * closes it and hands the item back.
  */
 export const UiSearchMenu: Component<UiSearchMenuProps> = (props) => {
-  const [open, setOpen] = createSignal(false);
-  const [query, setQuery] = createSignal("");
-  const [highlight, setHighlight] = createSignal(0);
+  let open = signal(false);
+  let query = signal("");
+  let highlight = signal(0);
   const listId = `${createUniqueId()}-listbox`;
-  let triggerEl: HTMLButtonElement | undefined;
-  let contentEl: HTMLDivElement | undefined;
-  let inputEl: HTMLInputElement | undefined;
-  let listEl: HTMLUListElement | undefined;
+  let triggerEl = signal<HTMLButtonElement | undefined>(undefined);
+  let contentEl = signal<HTMLDivElement | undefined>(undefined);
+  let inputEl = signal<HTMLInputElement | undefined>(undefined);
+  let listEl = signal<HTMLUListElement | undefined>(undefined);
 
-  createDismissOnOutside(open, setOpen, () => [triggerEl, contentEl]);
+  createDismissOnOutside(
+    () => open,
+    (value) => (open = value),
+    () => [triggerEl, contentEl],
+  );
   createMenuPosition(
-    open,
+    () => open,
     () => triggerEl,
     () => contentEl,
     () => props.placement ?? "bottom-end",
@@ -53,13 +57,15 @@ export const UiSearchMenu: Component<UiSearchMenuProps> = (props) => {
     () => inputEl?.focus(),
   );
 
-  const visible = createMemo(() => {
-    const words = query().toLowerCase().split(/\s+/).filter(Boolean);
-    return props.items.filter((item) => {
+  const words = computed(
+    query.toLowerCase().split(/\s+/).filter(Boolean),
+  );
+  const visible = computed(
+    props.items.filter((item) => {
       const text = item.toLowerCase();
       return words.every((word) => text.includes(word));
-    });
-  });
+    }),
+  );
 
   const scrollHighlight = () => {
     requestAnimationFrame(() => {
@@ -70,32 +76,32 @@ export const UiSearchMenu: Component<UiSearchMenuProps> = (props) => {
   };
 
   const close = (refocus: boolean) => {
-    setOpen(false);
+    open = false;
     if (refocus) triggerEl?.focus();
   };
 
   const toggle = () => {
-    if (open()) {
+    if (open) {
       close(false);
       return;
     }
-    setQuery("");
-    setHighlight(0);
-    setOpen(true);
+    query = "";
+    highlight = 0;
+    open = true;
   };
 
   const pick = (index: number) => {
-    const item = visible()[index];
+    const item = visible[index];
     if (item === undefined) return;
     close(true);
     props.onPick(item);
   };
 
   const move = (to: number) => {
-    const count = visible().length;
+    const count = visible.length;
     if (count === 0) return;
     // clamp, not wrap: wrapping teleports the highlight across the whole list
-    setHighlight(Math.min(count - 1, Math.max(0, to)));
+    highlight = Math.min(count - 1, Math.max(0, to));
     scrollHighlight();
   };
 
@@ -103,15 +109,15 @@ export const UiSearchMenu: Component<UiSearchMenuProps> = (props) => {
     switch (e.key) {
       case "Enter":
         e.preventDefault();
-        pick(highlight());
+        pick(highlight);
         break;
       case "ArrowDown":
         e.preventDefault();
-        move(highlight() + 1);
+        move(highlight + 1);
         break;
       case "ArrowUp":
         e.preventDefault();
-        move(highlight() - 1);
+        move(highlight - 1);
         break;
       case "Home":
         e.preventDefault();
@@ -119,7 +125,7 @@ export const UiSearchMenu: Component<UiSearchMenuProps> = (props) => {
         break;
       case "End":
         e.preventDefault();
-        move(visible().length - 1);
+        move(visible.length - 1);
         break;
       case "Escape":
         e.preventDefault();
@@ -134,70 +140,68 @@ export const UiSearchMenu: Component<UiSearchMenuProps> = (props) => {
   return (
     <>
       <UiIconButton
-        ref={triggerEl}
+        ref={(el) => (triggerEl = el)}
         class={props.class}
         icon={props.icon}
         label={props.label}
         aria-haspopup="listbox"
-        aria-expanded={open() ? "true" : "false"}
-        aria-controls={open() ? listId : undefined}
+        aria-expanded={open ? "true" : "false"}
+        aria-controls={open ? listId : undefined}
         onClick={toggle}
       />
-      <Show when={open()}>
+      <Show when={open}>
         <Portal>
           <div
-            ref={contentEl}
+            ref={(el) => (contentEl = el)}
             class={styles.content}
             style={{ position: "fixed", left: "0px", top: "0px" }}
           >
             <input
-              ref={inputEl}
+              ref={(el) => (inputEl = el)}
               type="text"
-              role="combobox"
+              attr:role="combobox"
               class={styles.search}
               aria-label={props.label}
               aria-expanded="true"
               aria-controls={listId}
               aria-activedescendant={
-                visible().length > 0 ? `${listId}-${highlight()}` : undefined
+                visible.length > 0 ? `${listId}-${highlight}` : undefined
               }
               aria-autocomplete="list"
               autocomplete="off"
               autocorrect="off"
               spellcheck={false}
               placeholder={props.placeholder ?? props.label}
-              value={query()}
+              value={query}
               onInput={(e) => {
-                setQuery(e.currentTarget.value);
-                setHighlight(0);
+                query = e.currentTarget.value;
+                highlight = 0;
               }}
               onKeyDown={onKeyDown}
             />
             <Show
-              when={visible().length > 0}
+              when={visible.length > 0}
               fallback={<p class={styles.empty}>{t("ui.noMatches")}</p>}
             >
               <ul
-                ref={listEl}
+                ref={(el) => (listEl = el)}
                 id={listId}
-                role="listbox"
+                attr:role="listbox"
                 class={styles.listbox}
                 aria-label={props.label}
               >
-                <For each={visible()}>
+                <For each={visible}>
                   {(item, index) => (
                     <li
-                      id={`${listId}-${index()}`}
-                      role="option"
+                      id={`${listId}-${index}`}
+                      attr:role="option"
                       aria-selected="false"
-                      data-highlighted={
-                        index() === highlight() ? "" : undefined
-                      }
+                      data-highlighted={index === highlight ? "" : undefined}
                       class={styles.item}
                       // keeps focus in the search field through a click
                       onPointerDown={(e) => e.preventDefault()}
-                      onClick={() => pick(index())}
-                      onPointerMove={() => setHighlight(index())}
+                      onClick={() => pick(index)}
+                      onPointerMove={() => (highlight = index)}
                     >
                       {item}
                     </li>

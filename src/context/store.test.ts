@@ -1,6 +1,7 @@
 import * as v from "valibot";
 import { afterEach, describe, expect, it } from "vitest";
-import { createRoot, createStore, flush, type Store } from "solid-js";
+import { store } from "reze-js";
+import { tick } from "@rezejs/testing-library";
 import { createNodesDispatch } from "~/context/reducer";
 import { onStoreAction, storeActions } from "~/context/actions";
 import { bindStore, dispatchAction, stackNodes } from "~/context/store-bridge";
@@ -9,7 +10,7 @@ import { convertToPure, convertToStack } from "~/lib/convert";
 import { createNode, nodeRegistry } from "~/lib/nodes";
 import { sanitizeNode } from "~/lib/node-shape";
 import { pipeline } from "~/lib/pipeline";
-import { NodesActionType } from "~/types/actions";
+import { type AnyAction, NodesActionType } from "~/types/actions";
 import type { StackNode } from "~/types/node";
 
 /** The store is open: plugins add actions, may rewrite or refuse any action,
@@ -20,15 +21,9 @@ afterEach(() => {
 });
 
 const setup = (seed: StackNode[]) => {
-  let result!: {
-    nodes: Store<StackNode[]>;
-    dispatch: ReturnType<typeof createNodesDispatch>;
-  };
-  createRoot(() => {
-    const [nodes, setNodes] = createStore<StackNode[]>(seed);
-    result = { nodes, dispatch: createNodesDispatch(setNodes) };
-  });
-  return result;
+  const nodes = store<StackNode[]>(seed);
+  const dispatch: (action: AnyAction) => void = createNodesDispatch(nodes);
+  return { nodes, dispatch };
 };
 const level = (uid: string): StackNode => ({
   ...createNode("level")!,
@@ -47,7 +42,7 @@ describe("plugin actions", () => {
     const heard: string[] = [];
     undo.push(onStoreAction((action) => heard.push(action.type)));
     dispatch({ type: "acme:reverse" });
-    flush();
+    tick();
     expect(nodes.map((n) => n.uid)).toEqual(["b", "a"]);
     expect(heard).toEqual(["acme:reverse"]);
   });
@@ -71,7 +66,7 @@ describe("plugin actions", () => {
     const heard: string[] = [];
     undo.push(onStoreAction((action) => heard.push(action.type)));
     expect(() => dispatch({ type: "acme:boom" })).not.toThrow();
-    flush();
+    tick();
     expect(nodes).toHaveLength(1);
     expect(heard).toEqual([]);
     expect(pipeline.failures().at(-1)).toMatchObject({
@@ -105,7 +100,7 @@ describe("store.action hooks", () => {
       ),
     );
     dispatch({ type: NodesActionType.DELETE, payload: "a" });
-    flush();
+    tick();
     expect(nodes).toHaveLength(2);
   });
 
@@ -122,7 +117,7 @@ describe("store.action hooks", () => {
       ),
     );
     dispatch({ type: NodesActionType.CHANGE, payload: { uid: "a" } });
-    flush();
+    tick();
     expect(nodes[0].name).toBe("renamed");
   });
 
@@ -137,7 +132,7 @@ describe("store.action hooks", () => {
     expect(() =>
       dispatch({ type: NodesActionType.DELETE, payload: "a" }),
     ).not.toThrow();
-    flush();
+    tick();
     expect(nodes).toHaveLength(1);
   });
 });
@@ -153,7 +148,7 @@ describe("node ext", () => {
       type: NodesActionType.CHANGE,
       payload: { uid: "a", ext: { "acme.note": "n" } },
     });
-    flush();
+    tick();
     expect(nodes[0].ext).toEqual({ "acme.tags": ["x"], "acme.note": "n" });
   });
 
@@ -193,7 +188,7 @@ describe("orphan adoption", () => {
     );
     // adoption is deferred out of the definer's reactive scope
     await Promise.resolve();
-    flush();
+    tick();
     // the stored string fails the schema → default; the missing key is filled
     expect(nodes[0].options).toEqual({ strength: 1, mode: "fast" });
   });
@@ -204,7 +199,7 @@ describe("orphan adoption", () => {
     expect(stackNodes()).toBe(nodes);
     undo.push(pipeline.use("store.action", () => null));
     dispatchAction({ type: NodesActionType.DELETE, payload: "a" });
-    flush();
+    tick();
     expect(nodes).toHaveLength(1);
   });
 });

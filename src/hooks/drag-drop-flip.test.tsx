@@ -1,5 +1,5 @@
-import { render } from "@solidjs/testing-library";
-import { createStore, flush } from "solid-js";
+import { afterEach, cleanup, mount, tick } from "@rezejs/testing-library";
+import { store } from "reze-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NodesContext, NodesDispatchContext } from "~/context/contexts";
 import { createNodesDispatch } from "~/context/reducer";
@@ -37,6 +37,8 @@ const pointerEvent = (
 
 describe("drop during in-flight flip", () => {
   const running = new Set<HTMLElement>();
+
+  afterEach(cleanup);
 
   beforeEach(() => {
     running.clear();
@@ -101,19 +103,19 @@ describe("drop during in-flight flip", () => {
     toY: number,
   ) => {
     rows()[0]!.dispatchEvent(pointerEvent("pointerdown", id, fromY));
-    flush();
+    tick();
     rows()[0]!.dispatchEvent(pointerEvent("pointermove", id, toY));
-    flush();
+    tick();
     rows()[0]!.dispatchEvent(pointerEvent("pointerup", id, toY));
-    flush();
+    tick();
   };
 
   it("second drop lands correctly despite the first animation", async () => {
-    const [nodes, setNodes] = createStore(createDefaultNodes().slice(0, 3));
+    const nodes = store(createDefaultNodes().slice(0, 3));
     const before = order(nodes);
-    const dispatch = createNodesDispatch(setNodes);
-    const [selected] = createStore<Record<string, boolean>>({});
-    const view = render(() => (
+    const dispatch = createNodesDispatch(nodes);
+    const selected = store<Record<string, boolean>>({});
+    const view = mount(() => (
       <NodesContext value={nodes}>
         <NodesDispatchContext value={dispatch}>
           <NodesList
@@ -125,9 +127,7 @@ describe("drop during in-flight flip", () => {
       </NodesContext>
     ));
     const rows = () =>
-      Array.from(
-        view.container.querySelectorAll("[data-flip-key]"),
-      ) as HTMLElement[];
+      Array.from(view.el.querySelectorAll("[data-flip-key]")) as HTMLElement[];
 
     // drop 1: first card to the end -> [B, C, A]
     gesture(rows, 1, 10, 3 * ROW + 10);
@@ -145,6 +145,6 @@ describe("drop during in-flight flip", () => {
     await vi.waitFor(() =>
       expect(order(nodes)).toEqual([before[2], before[1], before[0]]),
     );
-    view.unmount();
+    view.dispose();
   });
 });

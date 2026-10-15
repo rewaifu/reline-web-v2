@@ -1,5 +1,6 @@
 import type { StackNode } from "~/types/node";
-import { type Component, Show, createUniqueId } from "solid-js";
+import { Show, createUniqueId } from "reze-js";
+import type { Component } from "~/types/component";
 import { PsdFit, WriterNodeFormat } from "~/types/enums";
 import { useNodeForm, CheckRow, PathRow, SelectRow } from "./shared";
 import { Label, UiSelect, UiSwitch } from "~/components/ui";
