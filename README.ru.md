@@ -65,6 +65,14 @@ http://localhost:3000/?api=ws://127.0.0.1:8000/run
 Прежде чем считать правку готовой, запустите `pnpm lint`, `pnpm typecheck`, `pnpm test` и
 `pnpm build`.
 
+### Публикация
+
+Пуш в `main` (или ручной запуск workflow `ci`) после прохождения проверок собирает сайт и выкладывает `dist/client`
+в S3-совместимое хранилище (`.github/workflows/ci.yml`, job `deploy`). Чанки с хэшем кэшируются навсегда,
+`index.html` отдаётся с `no-cache` и грузится последним. Нужны секреты репозитория (Settings → Secrets and variables →
+Actions): `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` (cloud.ru: `<tenant id>:<key id>`),
+`S3_SECRET_ACCESS_KEY`.
+
 ## Конфиги
 
 Конфиг — JSON-объект со списком нод; у каждой ноды есть `type` и `options`:

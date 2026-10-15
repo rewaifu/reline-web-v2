@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   check:
@@ -25,3 +26,69 @@ jobs:
       # what the sources build to, or `plugin.json` would pin stale bytes
       - run: pnpm plugin:build && pnpm plugin:pin
       - run: git diff --exit-code -- public/plugins
+      # the exact bytes the checks ran against are what gets published
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: dist/client
+          if-no-files-found: error
+
+  # Publishes the built UI to S3-compatible storage. Only a push to main (or a
+  # manual run) deploys; pull requests stop after `check`. Every parameter comes
+  # from repository secrets (Settings → Secrets and variables → Actions):
+  #   S3_ENDPOINT            e.g. https://s3.cloud.ru
+  #   S3_REGION              e.g. ru-central-1
+  #   S3_BUCKET              bucket name
+  #   S3_ACCESS_KEY_ID       cloud.ru takes `<tenant id>:<key id>` here
+  #   S3_SECRET_ACCESS_KEY
+  deploy:
+    needs: check
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    # one deploy at a time; a newer push waits instead of racing the sync
+    concurrency:
+      group: deploy-s3
+      cancel-in-progress: false
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.S3_REGION }}
+      AWS_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT }}
+      S3_BUCKET: ${{ secrets.S3_BUCKET }}
+      # S3-compatible stores reject the default CRC checksums of recent AWS CLIs
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site
+      - name: Check the secrets are set
+        run: |
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_ENDPOINT_URL S3_BUCKET; do
+            [ -n "${!name}" ] || { echo "::error::secret for $name is empty or missing"; exit 1; }
+          done
+      - name: Use path-style addressing
+        run: aws configure set default.s3.addressing_style path
+      # Chunk names carry a content hash: cache them for good. They go up first
+      # and are never deleted here, so a page that is still open keeps finding
+      # the lazy chunks of the build it loaded.
+      - name: Upload hashed assets
+        run: >
+          aws s3 sync site/assets "s3://${S3_BUCKET}/assets"
+          --cache-control "public, max-age=31536000, immutable"
+      # Everything else is addressed by a fixed name: icons and the plugin
+      # catalog may change, so they are revalidated; the plugin bundles are
+      # pinned by hash in their manifests, which are small and revalidated too.
+      - name: Upload the rest
+        run: >
+          aws s3 sync site "s3://${S3_BUCKET}"
+          --exclude "assets/*" --exclude "index.html"
+          --cache-control "public, max-age=300, must-revalidate"
+          --delete
+      # The entry page last: it is what switches visitors to the new chunks.
+      - name: Upload index.html
+        run: >
+          aws s3 cp site/index.html "s3://${S3_BUCKET}/index.html"
+          --cache-control "no-cache"
+          --content-type "text/html; charset=utf-8"

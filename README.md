@@ -64,6 +64,13 @@ http://localhost:3000/?api=ws://127.0.0.1:8000/run
 
 Before calling a change done, run `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build`.
 
+### Deploy
+
+A push to `main` (or a manual run of the `ci` workflow) builds the site and publishes `dist/client` to S3-compatible
+storage after the checks pass (`.github/workflows/ci.yml`, job `deploy`). Hashed chunks are cached for good,
+`index.html` is `no-cache` and uploaded last. Set these repository secrets (Settings → Secrets and variables → Actions):
+`S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` (cloud.ru: `<tenant id>:<key id>`), `S3_SECRET_ACCESS_KEY`.
+
 ## Configs
 
 A config is a JSON object with a node list; each node has a `type` and `options`:
