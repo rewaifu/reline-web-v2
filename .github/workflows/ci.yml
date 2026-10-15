@@ -33,7 +33,8 @@ jobs:
           path: dist/client
           if-no-files-found: error
 
-  # Publishes the built UI to S3-compatible storage. Only a push to main (or a
+  # Publishes the built UI to S3-compatible storage, into the `wtp_forever/`
+  # folder of the bucket and nowhere else (the `--delete` below is scoped to it too). Only a push to main (or a
   # manual run) deploys; pull requests stop after `check`. Every parameter comes
   # from repository secrets (Settings → Secrets and variables → Actions):
   #   S3_ENDPOINT            e.g. https://s3.cloud.ru
@@ -55,6 +56,8 @@ jobs:
       AWS_DEFAULT_REGION: ${{ secrets.S3_REGION }}
       AWS_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT }}
       S3_BUCKET: ${{ secrets.S3_BUCKET }}
+      # the only place in the bucket this job writes to or deletes from
+      S3_PREFIX: wtp_forever
       # S3-compatible stores reject the default CRC checksums of recent AWS CLIs
       AWS_REQUEST_CHECKSUM_CALCULATION: when_required
       AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
@@ -75,20 +78,20 @@ jobs:
       # the lazy chunks of the build it loaded.
       - name: Upload hashed assets
         run: >
-          aws s3 sync site/assets "s3://${S3_BUCKET}/assets"
+          aws s3 sync site/assets "s3://${S3_BUCKET}/${S3_PREFIX}/assets"
           --cache-control "public, max-age=31536000, immutable"
       # Everything else is addressed by a fixed name: icons and the plugin
       # catalog may change, so they are revalidated; the plugin bundles are
       # pinned by hash in their manifests, which are small and revalidated too.
       - name: Upload the rest
         run: >
-          aws s3 sync site "s3://${S3_BUCKET}"
+          aws s3 sync site "s3://${S3_BUCKET}/${S3_PREFIX}"
           --exclude "assets/*" --exclude "index.html"
           --cache-control "public, max-age=300, must-revalidate"
           --delete
       # The entry page last: it is what switches visitors to the new chunks.
       - name: Upload index.html
         run: >
-          aws s3 cp site/index.html "s3://${S3_BUCKET}/index.html"
+          aws s3 cp site/index.html "s3://${S3_BUCKET}/${S3_PREFIX}/index.html"
           --cache-control "no-cache"
           --content-type "text/html; charset=utf-8"

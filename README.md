@@ -66,8 +66,8 @@ Before calling a change done, run `pnpm lint`, `pnpm typecheck`, `pnpm test` and
 
 ### Deploy
 
-A push to `main` (or a manual run of the `ci` workflow) builds the site and publishes `dist/client` to S3-compatible
-storage after the checks pass (`.github/workflows/ci.yml`, job `deploy`). Hashed chunks are cached for good,
+A push to `main` (or a manual run of the `ci` workflow) builds the site and publishes `dist/client` to the `wtp_forever/` folder of an S3-compatible
+bucket (nothing outside it is touched) after the checks pass (`.github/workflows/ci.yml`, job `deploy`). Hashed chunks are cached for good,
 `index.html` is `no-cache` and uploaded last. Set these repository secrets (Settings → Secrets and variables → Actions):
 `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` (cloud.ru: `<tenant id>:<key id>`), `S3_SECRET_ACCESS_KEY`.
 
