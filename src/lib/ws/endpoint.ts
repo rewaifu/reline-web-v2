@@ -10,6 +10,13 @@ const apiEndpointFromUrl = (): string | undefined => {
   return q.replace(/^http/, "ws");
 };
 
+/** The user pointed the page at a runner (a `?api=` link, or an address typed
+ * in the run tab) — as opposed to the built-in default nobody chose. What the
+ * page may do with the runner on its own (sync presets) is gated on this. */
+export const endpointConfigured = (): boolean =>
+  apiEndpointFromUrl() !== undefined ||
+  storage.get(RUN_ENDPOINT_KEY) !== undefined;
+
 /** ?api= wins, then the last value typed in the run tab, then the default. */
 const resolveEndpoint = (): string =>
   apiEndpointFromUrl() ?? storage.get(RUN_ENDPOINT_KEY) ?? DEFAULT_ENDPOINT;

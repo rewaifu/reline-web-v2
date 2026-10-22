@@ -311,11 +311,15 @@ except through `patches/@rebase-ui__reze@0.1.2.patch`.
   dead weight. Text buttons with a leading symbol (`▶ Запустить`, `■ Стоп`) are labels, not
   icon-only controls, and may stay.
 - **One transport layer, `src/lib/ws/`** (import from `~/lib/ws`): `openConnection` is one socket —
-  MessagePack envelope (`codec.ts`), the heartbeat (`protocol.ts`: echo 5 s / silence 15 s) and
+  MessagePack envelope (`codec.ts`), the heartbeat (`protocol.ts`: echo 5 s / silence 45 s, handshake limit 12 s → `closed("timeout")`) and
   the `ws.send` / `ws.receive` plugin stages; no reconnect, no request matching. Policies sit on
   top: `run-client.ts` owns a connection per run and its own resume FSM (`status` → `attach`,
-  never a second `start`); `createHub` / `wsHub` is the shared lazy connection (`ls`, plugin calls)
-  with `request` (matched by id + reply method, queued while connecting, typed `WsRequestError`),
+  never a second `start`; retries are bounded by _time_ — 10 min for a followed run, 30 s for a dial that never
+  reached the runner — with backoff 1/2/4/8 s then 10 s, and from the second failure `lib/link-probe.ts` asks
+  `GET /health` what the link is (online / unknown / expired / closed / offline / unreachable / localDown / noNetwork …,
+  `X-Krot-Link` verdicts): a _final_ state ends the run at once, the rest is waited for; the Run tab shows the same
+  state under the address field via `lib/link-status.ts`); `createHub` / `wsHub` is the shared lazy connection (`ls`, plugin calls)
+  with `request` (matched by id + reply method, queued while connecting, typed `WsRequestError`; an `error` frame with the request's id rejects it as `kind: "remote"` at once instead of timing out),
   `call` (declared methods, `wsMethods.define`, valibot-checked request and reply), `on` (pushes)
   and `open`. Never open a `WebSocket` or `encode`/`decode` anywhere else, and never copy the echo
   logic. `WebSocket` is looked up at call time (tests stub the global). Long-lived timers are
@@ -560,3 +564,13 @@ A top-level **array** (instead of `{nodes, preprocess}`) is the old shape: `down
   `src/context/reducer.ts`; it is the fastest way to prove no remount storm was reintroduced.
 - Component tests use `@rezejs/testing-library` (`mount`, `fire`, `settle`, `tick`, `cleanup`); `afterEach(cleanup)`.
   The old `flush()` is gone: a write is visible at once, the DOM needs `tick()`.
+
+## Presets on the runner's disk
+
+`RELINE_PRESETS_DIR` on the runner (`--presets-dir`) is where presets live; the page uses `config_list` (with
+`enabled`) / `config_read` / `config_write` / `config_delete` (`lib/ws/core.ts`, `lib/presets-disk.ts`), one
+`user-<n>.json` per preset. `lib/presets.ts`: `syncPresets()` merges (disk wins on equal id, browser-only presets are
+uploaded, unreadable files are never overwritten, only `user-*` ids are taken), later saves/deletes go to the disk
+while the state is `synced`; a delete that could not reach the runner is remembered (`reline-web:presets:deleted`) so
+the next sync does not resurrect it. The Presets tab syncs on open **only when the user chose a runner**
+(`endpointConfigured()`) — never dial the default address uninvited. localStorage stays the cache.

@@ -11,6 +11,7 @@ export type WsFailure =
   | "addressChanged"
   | "badAddress"
   | "unknownMethod"
+  | "remote"
   | "badRequest"
   | "badReply";
 
@@ -142,6 +143,18 @@ export const createHub = (endpoint: () => string): Hub => {
     if (entry !== undefined && entry.reply === frame.m) {
       settle(id);
       entry.resolve(frame.d ?? {});
+    } else if (entry !== undefined && frame.m === "error") {
+      // the runner refused this request: say so now with its own words, instead
+      // of letting the request run into the timeout as if nothing had come back
+      settle(id);
+      const detail = frame.d?.message;
+      entry.reject(
+        new WsRequestError(
+          "remote",
+          entry.method,
+          typeof detail === "string" ? detail : "",
+        ),
+      );
     }
     for (const handler of listeners.get(frame.m) ?? []) {
       try {

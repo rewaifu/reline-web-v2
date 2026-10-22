@@ -21,21 +21,30 @@ const stored = (): Locale | undefined => {
   return raw === "ru" || raw === "en" ? raw : undefined;
 };
 
-/** Stored choice first, then the browser's languages. Russian is the default
- * for anything unrecognised: the content the app is built around is
- * Russian-first. */
+/**
+ * The first of the browser's languages (in the order the user ranked them) that
+ * the UI ships. `["en-US", "ru"]` is English: the list is a preference order,
+ * and asking "is Russian anywhere in it" made everyone who merely has Russian
+ * installed get Russian. A list with nothing we ship (`["de"]`) is English, the
+ * common fallback.
+ */
+export const detectLocale = (languages: readonly string[]): Locale => {
+  for (const lang of languages) {
+    const base = lang.toLowerCase().split(/[-_]/)[0];
+    if (base === "ru" || base === "en") return base;
+  }
+  return "en";
+};
+
+/** Stored choice first, then the browser's languages. */
 const initial = (): Locale => {
   const kept = stored();
   if (kept !== undefined) return kept;
-  // no DOM (prerender, a test): the shell is Russian, the same default an
-  // unrecognised browser gets
+  // no DOM (prerender, a test): the shell is Russian, the document default
   if (typeof navigator === "undefined") return "ru";
-  const langs = navigator.languages?.length
-    ? navigator.languages
-    : [navigator.language];
-  return langs.some((lang) => lang.toLowerCase().startsWith("ru"))
-    ? "ru"
-    : "en";
+  return detectLocale(
+    navigator.languages?.length ? navigator.languages : [navigator.language],
+  );
 };
 
 let current = signal<Locale>(initial());

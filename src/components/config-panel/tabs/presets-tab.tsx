@@ -1,4 +1,12 @@
-import { For, Show, selector, signal, useContext } from "reze-js";
+import {
+  For,
+  Show,
+  effect,
+  selector,
+  signal,
+  untrack,
+  useContext,
+} from "reze-js";
 import { NodesContext, NodesDispatchContext } from "~/context/contexts";
 import { NodesActionType } from "~/types/actions";
 import type { Component } from "~/types/component";
@@ -7,8 +15,11 @@ import {
   saveUserPreset,
   deletePreset,
   hiddenStockCount,
+  presetsDisk,
   restoreStockPresets,
+  syncPresets,
 } from "~/lib/presets";
+import { endpointConfigured } from "~/lib/ws";
 import { render as localText, t } from "~/lib/i18n";
 import { Icon } from "~/components/ui";
 import styles from "../config-panel.module.scss";
@@ -19,6 +30,15 @@ export const PresetsTab: Component = () => {
   let presetId = signal<string>();
   let name = signal("");
   const isActive = selector(() => presetId);
+
+  // Opening the tab brings the presets and the runner's folder together — but
+  // only for a runner the user chose: a page that dialled the default address
+  // unasked would knock on 127.0.0.1 of every visitor.
+  effect(() => {
+    untrack(() => {
+      if (endpointConfigured() && presetsDisk() === "idle") void syncPresets();
+    });
+  });
 
   const applyPreset = (id: string) => {
     const preset = allPresets().find((p) => p.id === id);
@@ -56,6 +76,21 @@ export const PresetsTab: Component = () => {
           onClick={saveCurrent}
         >
           {t("panel.presets.save")}
+        </button>
+      </div>
+      <div class={styles.presetDisk} data-state={presetsDisk()}>
+        <span class={styles.presetDiskText}>
+          {t(`panel.presets.disk.${presetsDisk()}`)}
+        </span>
+        <button
+          type="button"
+          class={styles.presetDiskSync}
+          disabled={presetsDisk() === "syncing"}
+          aria-label={t("panel.presets.disk.sync")}
+          title={t("panel.presets.disk.sync")}
+          onClick={() => void syncPresets()}
+        >
+          <Icon name="refresh" size={14} />
         </button>
       </div>
       <For each={allPresets()}>

@@ -19,7 +19,11 @@ browser: the page is a static site that edits a JSON config and talks to the run
   presets, and a Code tab to read, edit, copy, import and export the config. Older flat configs
   import and are migrated.
 - **Runs.** Start, watch phases, speed and ETA, stop, reconnect and resume a run that is still going
-  on the runner. See [WS_API.md](WS_API.md) for the protocol.
+  on the runner. A dropped connection is redialled for up to ten minutes, and the Run tab says what
+  state the link is in — online, a link that was never published, expired or closed, a runner that is
+  away, a service that does not answer behind the tunnel. See [WS_API.md](WS_API.md) for the protocol.
+- **Presets on the runner's disk.** Presets you save are also written to the folder the runner is
+  configured with (`RELINE_PRESETS_DIR`), so they follow the machine the work happens on.
 - **Plugins.** Install a plugin by link: new node types, UI, pipeline hooks, runner methods. A
   verified catalog ships with the editor. See [docs/PLUGINS.en.md](docs/PLUGINS.en.md).
 - **Russian and English** interface; works on a phone (two panels and a bottom switcher).
