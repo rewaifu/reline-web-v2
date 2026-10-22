@@ -3,6 +3,7 @@ import { tick } from "@rezejs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, setLocale } from "~/lib/i18n";
 import { createRunClient, type RunClient } from "~/lib/run-client";
+import type { LinkProbe, LinkReport, LinkState } from "~/lib/link-probe";
 import type { PureConfig } from "~/types/node";
 
 /** Frames travel as JSON here.
@@ -92,6 +93,15 @@ class FakeSocket {
   }
 }
 
+/** What the link says when the client asks — a test sets the verdict. The real
+ * probe talks HTTP and is tested on its own (`link-probe.test.ts`). */
+let verdict: LinkState = "offline";
+const asked: string[] = [];
+const probe: LinkProbe = async (url) => {
+  asked.push(url);
+  return { state: verdict, url, at: Date.now() } satisfies LinkReport;
+};
+
 const PIPELINE = { nodes: [], preprocess: [] } as unknown as PureConfig;
 
 /** What the journal reads right now, rendered in the current language. */
@@ -118,6 +128,8 @@ beforeEach(() => {
   // own language instead of inheriting one
   setLocale("ru");
   FakeSocket.reset();
+  verdict = "offline";
+  asked.length = 0;
   vi.useFakeTimers();
   vi.stubGlobal("WebSocket", FakeSocket);
 });
@@ -129,7 +141,7 @@ afterEach(() => {
 
 describe("run lifecycle", () => {
   it("sends the config and follows the server", () => {
-    const client = createRunClient();
+    const client = createRunClient(probe);
     const socket = startRun(client);
 
     expect(client.phase()).toBe("running");
@@ -171,7 +183,7 @@ describe("run lifecycle", () => {
 });
 describe("reconnect", () => {
   it("asks status and attaches after a drop instead of repeating start", () => {
-    const client = createRunClient();
+    const client = createRunClient(probe);
     const first = startRun(client);
     first.server({
       m: "progress",
@@ -186,7 +198,7 @@ describe("reconnect", () => {
     expect(client.phase()).toBe("recovering");
     expect(client.runId()).toBe(RUN_ID);
     expect(client.progress()?.percent).toBe(40);
-    expect(journal(client).at(-1)).toBe("Переподключение (1/4)…");
+    expect(journal(client).at(-1)).toBe("Переподключение, попытка 1…");
     expect(FakeSocket.all).toHaveLength(1);
 
     vi.advanceTimersByTime(1000);
@@ -233,11 +245,11 @@ describe("reconnect", () => {
     expect(client.progress()?.percent).toBe(80);
     second.drop();
     tick();
-    expect(journal(client).at(-1)).toBe("Переподключение (1/4)…");
+    expect(journal(client).at(-1)).toBe("Переподключение, попытка 1…");
   });
 
   it("adopts the run_id from worker busy instead of arguing with the gate", () => {
-    const client = createRunClient();
+    const client = createRunClient(probe);
     client.start("ws://runner/run", PIPELINE);
     tick();
     const first = last();
@@ -257,7 +269,7 @@ describe("reconnect", () => {
   });
 
   it("ends the watch when the run finished while we were away", () => {
-    const client = createRunClient();
+    const client = createRunClient(probe);
     const first = startRun(client);
     first.drop();
     tick();
@@ -278,7 +290,7 @@ describe("reconnect", () => {
   });
 
   it("retries an address that never answered instead of going quiet", () => {
-    const client = createRunClient();
+    const client = createRunClient(probe);
     // a typo, a wrong port, a runner that is down: the socket dies before the
     // upgrade, so `onopen` never ran. This used to end the run in silence —
     // no retry, no journal line, and the panel looking idle as if nothing had
@@ -293,34 +305,37 @@ describe("reconnect", () => {
     tick();
     expect(FakeSocket.all).toHaveLength(1);
 
-    const first = last();
-    first.drop();
+    last().drop();
     tick();
     expect(client.phase()).toBe("connecting");
-    expect(journal(client).at(-1)).toBe("Переподключение (1/4)…");
+    expect(journal(client).at(-1)).toBe("Переподключение, попытка 1…");
 
     vi.advanceTimersByTime(1000);
     expect(FakeSocket.all).toHaveLength(2);
     last().drop();
     tick();
-    expect(journal(client).at(-1)).toBe("Переподключение (2/4)…");
-
-    // and it stops on its own: four attempts, then one readable line
-    vi.advanceTimersByTime(2000);
-    last().drop();
-    tick();
-    vi.advanceTimersByTime(4000);
-    last().drop();
-    tick();
-    vi.advanceTimersByTime(8000);
-    last().drop();
-    tick();
-    expect(client.phase()).toBe("idle");
-    expect(journal(client).at(-1)).toContain("Переподключиться не удалось");
+    expect(journal(client).at(-1)).toBe("Переподключение, попытка 2…");
   });
 
-  it("backs off between attempts", () => {
-    const client = createRunClient();
+  it("gives up on a dial that never reached the runner within half a minute", async () => {
+    const client = createRunClient(probe);
+    client.start("ws://dead/run", PIPELINE);
+    tick();
+    for (let i = 0; i < 12 && client.phase() !== "idle"; i += 1) {
+      last().drop();
+      tick();
+      await vi.advanceTimersByTimeAsync(10_000);
+    }
+    expect(client.phase()).toBe("idle");
+    const line = journal(client).at(-1) ?? "";
+    // one line, naming the address and what the link said
+    expect(line).toContain("Не удалось подключиться");
+    expect(line).toContain("ws://dead/run");
+    expect(line).toContain("Раннер не на связи");
+  });
+
+  it("backs off 1 s, 2 s, 4 s, 8 s and then every 10 s", async () => {
+    const client = createRunClient(probe);
     const first = startRun(client);
     first.drop();
     tick();
@@ -330,41 +345,152 @@ describe("reconnect", () => {
     vi.advanceTimersByTime(1);
     expect(FakeSocket.all).toHaveLength(2);
 
-    last().drop();
-    tick();
-    vi.advanceTimersByTime(1999);
-    expect(FakeSocket.all).toHaveLength(2);
-    vi.advanceTimersByTime(1);
-    expect(FakeSocket.all).toHaveLength(3);
+    for (const wait of [2000, 4000, 8000, 10_000, 10_000]) {
+      last().drop();
+      tick();
+      await vi.advanceTimersByTimeAsync(wait - 1);
+      const before = FakeSocket.all.length;
+      await vi.advanceTimersByTimeAsync(1);
+      expect(FakeSocket.all).toHaveLength(before + 1);
+    }
   });
 
-  it("gives up after the last attempt with one honest line", () => {
-    const client = createRunClient();
-    const first = startRun(client);
-
-    let socket = first;
-    for (let expected = 2; expected <= 5; expected += 1) {
-      socket.drop();
-      tick();
-      vi.advanceTimersByTime(30_000);
-      expect(FakeSocket.all).toHaveLength(expected);
-      socket = last();
-    }
-    socket.drop();
+  it("keeps a followed run for ten minutes, then says what the link last said", async () => {
+    const client = createRunClient(probe);
+    startRun(client).drop();
     tick();
-    vi.advanceTimersByTime(30_000);
 
-    expect(FakeSocket.all).toHaveLength(5);
+    let waited = 0;
+    while (client.phase() !== "idle" && waited < 12 * 60_000) {
+      await vi.advanceTimersByTimeAsync(10_000);
+      waited += 10_000;
+      if (client.phase() !== "idle") last().drop();
+      tick();
+    }
+    // far beyond the old fifteen seconds, and not an hour of retries either
+    expect(waited).toBeGreaterThan(9 * 60_000);
+    expect(waited).toBeLessThanOrEqual(11 * 60_000);
     expect(client.phase()).toBe("idle");
-    expect(journal(client).at(-1)).toContain("Переподключиться не удалось");
+    const line = journal(client).at(-1) ?? "";
+    expect(line).toContain("Связь не восстановилась за 10 мин");
+    expect(line).toContain("Раннер не на связи");
+    expect(line).toContain("нажмите «Продолжить»");
+  });
+
+  it("asks the link only from the second failed attempt", async () => {
+    const client = createRunClient(probe);
+    startRun(client).drop();
+    tick();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(asked).toEqual([]);
+    last().drop();
+    tick();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(asked).toEqual(["ws://runner/run"]);
+  });
+
+  it("writes a change of the link's state into the journal once", async () => {
+    const client = createRunClient(probe);
+    startRun(client).drop();
+    tick();
+    await vi.advanceTimersByTimeAsync(1000);
+    for (let i = 0; i < 3; i += 1) {
+      last().drop();
+      tick();
+      await vi.advanceTimersByTimeAsync(10_000);
+    }
+    const states = journal(client).filter((l) =>
+      l.startsWith("Связь с раннером"),
+    );
+    expect(states).toEqual(["Связь с раннером: Раннер не на связи"]);
+
+    verdict = "online";
+    last().drop();
+    tick();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(
+      journal(client).filter((l) => l.startsWith("Связь с раннером")),
+    ).toEqual([
+      "Связь с раннером: Раннер не на связи",
+      "Связь с раннером: Раннер на связи",
+    ]);
+  });
+
+  it.each([
+    ["unknown", "Ссылка не найдена"],
+    ["expired", "Ссылка просрочена"],
+    ["closed", "Ссылка закрыта"],
+  ] as const)(
+    "stops at once when the link says %s — waiting cannot fix it",
+    async (state, label) => {
+      verdict = state;
+      const client = createRunClient(probe);
+      startRun(client).drop();
+      tick();
+      await vi.advanceTimersByTimeAsync(1000);
+      last().drop();
+      tick();
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(client.phase()).toBe("idle");
+      const line = journal(client).at(-1) ?? "";
+      expect(line).toContain(label);
+      expect(line.startsWith("Прогон недоступен")).toBe(true);
+      // and nothing dials again
+      const dialled = FakeSocket.all.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(FakeSocket.all).toHaveLength(dialled);
+    },
+  );
+
+  it("treats a runner that is merely away as worth waiting for", async () => {
+    for (const state of [
+      "offline",
+      "unreachable",
+      "localDown",
+      "noNetwork",
+    ] as const) {
+      FakeSocket.reset();
+      verdict = state;
+      const client = createRunClient(probe);
+      startRun(client).drop();
+      tick();
+      await vi.advanceTimersByTimeAsync(1000);
+      last().drop();
+      tick();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(client.phase()).toBe("recovering");
+      client.stop();
+    }
+  });
+
+  it("redials a handshake that never finished instead of sitting in connecting", async () => {
+    const client = createRunClient(probe);
+    client.start("ws://slow/run", PIPELINE);
+    tick();
+    expect(FakeSocket.all).toHaveLength(1);
+    // the TCP connection is up, the upgrade never completes
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(journal(client)).toContain("Сервер не ответил на подключение");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(FakeSocket.all).toHaveLength(2);
+  });
+
+  it("survives a quiet runner: no echo for 20 s is not a dead socket", async () => {
+    const client = createRunClient(probe);
+    startRun(client);
+    await vi.advanceTimersByTimeAsync(40_000);
+    tick();
+    expect(client.phase()).toBe("running");
+    expect(FakeSocket.all).toHaveLength(1);
   });
 
   it("drops a silent socket and dials instead of ending the run", () => {
-    const client = createRunClient();
+    const client = createRunClient(probe);
     startRun(client);
 
-    // no echo reply: the watchdog fires, closes the socket, retries
-    vi.advanceTimersByTime(30_000);
+    // no echo reply for 45 s: the watchdog fires, closes the socket, retries
+    vi.advanceTimersByTime(50_000);
     tick();
     expect(client.phase()).toBe("recovering");
     expect(journal(client)).toContain(
@@ -373,7 +499,7 @@ describe("reconnect", () => {
   });
 
   it("does not retry a run the user stopped", () => {
-    const client = createRunClient();
+    const client = createRunClient(probe);
     const socket = startRun(client);
 
     client.stop();
@@ -392,7 +518,7 @@ describe("reconnect", () => {
   });
 
   it("cancels a pending retry when the user stops", () => {
-    const client = createRunClient();
+    const client = createRunClient(probe);
     startRun(client).drop();
     tick();
     expect(client.phase()).toBe("recovering");

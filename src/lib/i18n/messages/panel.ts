@@ -38,6 +38,14 @@ export const ru = {
       save: "Сохранить",
       remove: "Удалить",
       removeNamed: "Удалить пресет {name}",
+      disk: {
+        idle: "Диск раннера: не синхронизировано",
+        syncing: "Диск раннера: синхронизация…",
+        synced: "Пресеты сохраняются на диск раннера",
+        off: "Раннер не хранит пресеты: на нём не задана папка (RELINE_PRESETS_DIR)",
+        failed: "Диск раннера недоступен — пресеты пока только в браузере",
+        sync: "Синхронизировать с диском раннера",
+      },
       hide: "Скрыть стоковый пресет",
       restore: "Вернуть стоковые ({count})",
       description: {
@@ -115,6 +123,15 @@ export const en: typeof ru = {
       save: "Save",
       remove: "Delete",
       removeNamed: "Delete preset {name}",
+      disk: {
+        idle: "Runner disk: not synced",
+        syncing: "Runner disk: syncing…",
+        synced: "Presets are saved to the runner's disk",
+        off: "The runner stores no presets: no folder is set on it (RELINE_PRESETS_DIR)",
+        failed:
+          "The runner's disk is unavailable — presets are in the browser only for now",
+        sync: "Sync with the runner's disk",
+      },
       hide: "Hide stock preset",
       restore: "Restore stock ({count})",
       description: {

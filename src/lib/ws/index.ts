@@ -9,7 +9,7 @@ export { createHub, WsRequestError } from "./hub";
 export type { Hub, RequestOptions, WsFailure } from "./hub";
 export { wsMethods } from "./methods";
 export type { WsMethod } from "./methods";
-export { endpoint, setEndpoint } from "./endpoint";
+export { endpoint, endpointConfigured, setEndpoint } from "./endpoint";
 
 /** The app's shared connection to the runner: `ls`, and whatever a plugin asks
  * through `wsMethods` / `request`. A run has a connection of its own (it needs

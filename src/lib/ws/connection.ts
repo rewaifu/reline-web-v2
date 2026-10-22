@@ -1,6 +1,10 @@
 import { pipeline } from "~/lib/pipeline/hooks";
 import { decodeFrame, encodeFrame, type Frame } from "./codec";
-import { ECHO_INTERVAL_MS, ECHO_TIMEOUT_MS } from "./protocol";
+import {
+  ECHO_INTERVAL_MS,
+  ECHO_TIMEOUT_MS,
+  HANDSHAKE_TIMEOUT_MS,
+} from "./protocol";
 
 /**
  * One WebSocket to the runner: the envelope codec, the heartbeat contract
@@ -13,6 +17,8 @@ import { ECHO_INTERVAL_MS, ECHO_TIMEOUT_MS } from "./protocol";
  * `WebSocket` and the codec are looked up at call time, never captured: tests
  * stub the global after import.
  */
+export type ConnectionClose = "closed" | "silent" | "timeout";
+
 export interface ConnectionEvents {
   /** The handshake finished; the heartbeat is already running. */
   open?(): void;
@@ -21,8 +27,9 @@ export interface ConnectionEvents {
   /** Bytes that are not a frame. The connection stays open. */
   badFrame?(): void;
   /** The socket is gone. `silent`: it stopped answering the heartbeat and this
-   * side closed it. Never called after `close()`. */
-  closed(reason: "closed" | "silent"): void;
+   * side closed it. `timeout`: the handshake never finished and this side gave
+   * up on it. Never called after `close()`. */
+  closed(reason: ConnectionClose): void;
 }
 
 export interface Connection {
@@ -48,6 +55,7 @@ export const openConnection = (
   let nextId = 1;
   let lastEcho = 0;
   let echoTimer: ReturnType<typeof setInterval> | undefined;
+  let dialTimer: ReturnType<typeof setTimeout> | undefined;
   let detached = false;
 
   const write = (frame: Frame): boolean => {
@@ -67,6 +75,8 @@ export const openConnection = (
     detached = true;
     clearInterval(echoTimer);
     echoTimer = undefined;
+    clearTimeout(dialTimer);
+    dialTimer = undefined;
     socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null;
   };
 
@@ -81,8 +91,17 @@ export const openConnection = (
     return true;
   };
 
+  dialTimer = setTimeout(() => {
+    if (detached || socket.readyState === WebSocket.OPEN) return;
+    detach();
+    socket.close();
+    events.closed("timeout");
+  }, HANDSHAKE_TIMEOUT_MS);
+
   socket.onopen = () => {
     if (detached) return;
+    clearTimeout(dialTimer);
+    dialTimer = undefined;
     lastEcho = Date.now();
     echoTimer = setInterval(() => {
       if (Date.now() - lastEcho > ECHO_TIMEOUT_MS) {

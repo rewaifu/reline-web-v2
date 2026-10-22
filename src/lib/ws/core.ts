@@ -39,3 +39,44 @@ wsMethods.define({
   // the runner may have to ask the database first (its own timeout is 15 s)
   timeoutMs: 25_000,
 });
+
+/** The preset files of the runner's disk (WS_API.md, `config_*`): the folder is
+ * the deployment's (`RELINE_PRESETS_DIR`), the page only names files. `enabled`
+ * says whether the runner has a folder at all — an old runner that does not
+ * send it reads as "no". */
+export const ConfigListReply = v.object({
+  entries: v.optional(v.array(v.string()), []),
+  enabled: v.optional(v.boolean(), false),
+});
+
+export const ConfigReadReply = v.object({
+  name: v.string(),
+  content: v.string(),
+});
+
+const fileName = v.pipe(v.string(), v.minLength(1));
+
+wsMethods.define({
+  name: "config_list",
+  request: v.object({}),
+  response: ConfigListReply,
+});
+
+wsMethods.define({
+  name: "config_read",
+  request: v.object({ name: fileName }),
+  response: ConfigReadReply,
+});
+
+wsMethods.define({
+  name: "config_write",
+  request: v.object({ name: fileName, content: v.string() }),
+  response: v.object({ name: v.string() }),
+});
+
+wsMethods.define({
+  name: "config_delete",
+  request: v.object({ name: fileName }),
+  // the runner answers a bare `ok`: its payload is empty
+  reply: "ok",
+});

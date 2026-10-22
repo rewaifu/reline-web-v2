@@ -1,4 +1,4 @@
-import { effect, For, Show, signal, useContext } from "reze-js";
+import { effect, For, onCleanup, Show, signal, useContext } from "reze-js";
 import {
   AnalysisContext,
   NodesContext,
@@ -13,6 +13,8 @@ import { nodeLabel, nodeRegistry } from "~/lib/nodes";
 import { locale, message, render as localText, t } from "~/lib/i18n";
 import { Icon } from "~/components/ui";
 import { runClient, type RunMessage } from "~/lib/run-client";
+import { isFinalLinkState, type LinkState } from "~/lib/link-probe";
+import { checkLink, linkChecking, linkReport } from "~/lib/link-status";
 import { endpoint, setEndpoint } from "~/lib/ws";
 import {
   describeStage,
@@ -31,6 +33,15 @@ const LOG_LINE_CLASS: Record<RunMessage["kind"], string> = {
   info: styles.runLogInfo,
   ok: styles.runLogOk,
   error: styles.runLogError,
+};
+
+/** How a link state is drawn: the dot's colour says whether to wait, to act or
+ * that all is well. */
+const linkTone = (state: LinkState): "ok" | "wait" | "bad" | "unsure" => {
+  if (state === "online") return "ok";
+  if (isFinalLinkState(state)) return "bad";
+  if (state === "unverified") return "unsure";
+  return "wait";
 };
 
 export const RunTab: Component = () => {
@@ -108,6 +119,23 @@ export const RunTab: Component = () => {
     phase() === "running" ||
     phase() === "recovering" ||
     phase() === "stopping";
+  // The link is asked about while the tab is open: when it opens, as the
+  // address is typed (after a pause — a keystroke is not a question), and when
+  // a run ends. While a run is going the client asks it itself, on every retry.
+  effect(() => {
+    const url = endpoint().trim();
+    if (!url || busy()) return;
+    const timer = window.setTimeout(() => void checkLink(url), 700);
+    onCleanup(() => window.clearTimeout(timer));
+  });
+  /** The newest report, if it is about the address in the field. */
+  const link = () => {
+    const report = linkReport();
+    return report !== undefined && report.url === endpoint().trim()
+      ? report
+      : undefined;
+  };
+
   const stageText = () => {
     const current = run.progress();
     return current === undefined ? t("run.preparing") : describeStage(current);
@@ -150,6 +178,55 @@ export const RunTab: Component = () => {
         onInput={(e) => setEndpoint(e.currentTarget.value)}
         spellcheck={false}
       />
+      <div
+        class={styles.runLink}
+        data-tone={link() === undefined ? "none" : linkTone(link()!.state)}
+        role="status"
+      >
+        <span class={styles.runLinkDot} aria-hidden="true" />
+        <div class={styles.runLinkText}>
+          <Show
+            when={link()}
+            fallback={
+              <span class={styles.runLinkState}>
+                {linkChecking() ? t("link.checking") : t("link.unchecked")}
+              </span>
+            }
+          >
+            {(report) => (
+              <>
+                <span class={styles.runLinkState}>
+                  {t(`link.state.${report.state}`)}
+                </span>
+                <Show
+                  when={report.state === "online" && report.busy === true}
+                  fallback={
+                    <Show when={report.state !== "online"}>
+                      <span class={styles.runLinkHint}>
+                        {t(`link.hint.${report.state}`)}
+                      </span>
+                    </Show>
+                  }
+                >
+                  <span class={styles.runLinkHint}>
+                    {t("link.busy", { run: report.runId ?? "" })}
+                  </span>
+                </Show>
+              </>
+            )}
+          </Show>
+        </div>
+        <button
+          type="button"
+          class={styles.runLinkCheck}
+          disabled={linkChecking() || !endpoint().trim()}
+          aria-label={t("link.check")}
+          title={t("link.check")}
+          onClick={() => void checkLink(endpoint().trim())}
+        >
+          <Icon name="refresh" size={14} />
+        </button>
+      </div>
       <div class={styles.runControls}>
         <button
           type="button"

@@ -9,6 +9,7 @@ import {
   type MessageKey,
 } from "~/lib/i18n";
 import { en, ru } from "~/lib/i18n/messages";
+import { detectLocale } from "~/lib/i18n/locale";
 
 /** The dictionary as a flat `path → text` map, for parity checks. */
 const flatten = (value: unknown, prefix = ""): [string, string][] => {
@@ -79,5 +80,19 @@ describe("messages", () => {
     // an empty string is a translation that was never written
     expect(enEntries.filter(([, text]) => text.trim() === "")).toEqual([]);
     expect(ruEntries.filter(([, text]) => text.trim() === "")).toEqual([]);
+  });
+});
+
+describe("first-visit language", () => {
+  it("follows the order of the browser's languages, not their presence", () => {
+    expect(detectLocale(["ru-RU", "en"])).toBe("ru");
+    expect(detectLocale(["en-US", "ru"])).toBe("en");
+    expect(detectLocale(["de-DE", "ru", "en"])).toBe("ru");
+    expect(detectLocale(["EN_gb"])).toBe("en");
+  });
+
+  it("falls back to English when nothing shipped is listed", () => {
+    expect(detectLocale(["de"])).toBe("en");
+    expect(detectLocale([])).toBe("en");
   });
 });

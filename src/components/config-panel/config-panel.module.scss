@@ -255,6 +255,40 @@
   gap: var(--space-2);
 }
 
+// the runner's folder: one muted line and a button to sync by hand
+.presetDisk {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+
+  &[data-state="failed"] {
+    color: var(--color-warning);
+  }
+}
+
+.presetDiskText {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.presetDiskSync {
+  @include ghost-button;
+  @include hit-area;
+
+  flex: none;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
 .presetNameInput {
   @include field;
 
@@ -329,6 +363,71 @@
 
 .runInput {
   @include field;
+}
+
+// The state of the link to the runner under the address field: a dot whose
+// colour says whether to wait (amber), to act (red) or that all is well.
+.runLink {
+  --tone: var(--color-text-muted);
+
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+
+  &[data-tone="ok"] {
+    --tone: var(--color-success);
+  }
+
+  &[data-tone="wait"],
+  &[data-tone="unsure"] {
+    --tone: var(--color-warning);
+  }
+
+  &[data-tone="bad"] {
+    --tone: var(--color-danger);
+  }
+}
+
+.runLinkDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  background: var(--tone);
+  border-radius: 50%;
+}
+
+.runLinkText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+}
+
+.runLinkState {
+  color: var(--tone);
+  font-weight: 600;
+}
+
+.runLinkHint {
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.runLinkCheck {
+  @include ghost-button;
+  @include hit-area;
+
+  flex: none;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
 }
 
 .runControls {

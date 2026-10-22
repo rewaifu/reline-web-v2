@@ -10,7 +10,11 @@ import {
   wsMethods,
   type Frame,
 } from "~/lib/ws";
-import { ECHO_INTERVAL_MS, ECHO_TIMEOUT_MS } from "~/lib/ws/protocol";
+import {
+  ECHO_INTERVAL_MS,
+  ECHO_TIMEOUT_MS,
+  HANDSHAKE_TIMEOUT_MS,
+} from "~/lib/ws/protocol";
 
 /** Same stand-in as the run client's tests: Node's notepack build mangles the
  * `Uint8Array` a browser socket hands over, so frames travel as JSON. */
@@ -132,6 +136,34 @@ describe("connection", () => {
     vi.advanceTimersByTime(ECHO_TIMEOUT_MS + ECHO_INTERVAL_MS);
     expect(closes).toEqual(["silent"]);
     expect(socket.closed).toBe(true);
+  });
+
+  it("a runner busy for 40 s is not a dead one", () => {
+    const { socket, closes } = dial();
+    socket.open();
+    // no reply for 40 s — a model loading, a tunnel stalling — still connected
+    vi.advanceTimersByTime(40_000);
+    expect(closes).toEqual([]);
+    expect(socket.closed).toBe(false);
+    // and a reply makes it forget the silence
+    socket.server({ m: "echo" });
+    vi.advanceTimersByTime(40_000);
+    expect(closes).toEqual([]);
+  });
+
+  it("gives up on a handshake that never finishes", () => {
+    const { conn, closes, socket } = dial();
+    vi.advanceTimersByTime(HANDSHAKE_TIMEOUT_MS - 1);
+    expect(closes).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(closes).toEqual(["timeout"]);
+    expect(socket.closed).toBe(true);
+    // a socket that opened in time is left alone
+    const ok = dial();
+    ok.socket.open();
+    vi.advanceTimersByTime(HANDSHAKE_TIMEOUT_MS * 2);
+    expect(ok.closes).toEqual([]);
+    expect(conn.state()).toBe("closed");
   });
 
   it("never shows a heartbeat to the owner", () => {
@@ -282,6 +314,37 @@ describe("hub", () => {
     socket.open();
     socket.server({ m: "pong", id: socket.sent[0].id, d: { n: 1 } });
     await expect(pending).resolves.toEqual({ n: 1 });
+  });
+
+  it("fails a request the runner refused with its own words, not after the timeout", async () => {
+    const h = hub();
+    const pending = h.request("config_delete", { name: "x.json" });
+    const caught = pending.catch((e: unknown) => e);
+    const socket = last();
+    socket.open();
+    socket.server({
+      m: "error",
+      id: socket.sent[0].id,
+      d: { message: "No such file", fatal: false },
+    });
+    const error = await caught;
+    expect(error).toBeInstanceOf(WsRequestError);
+    expect(error).toMatchObject({ kind: "remote", method: "config_delete" });
+    expect((error as Error).message).toContain("No such file");
+  });
+
+  it("an error frame with another id leaves the request alone", async () => {
+    const h = hub();
+    const pending = h.request("ls", {}, { timeoutMs: 100 });
+    const socket = last();
+    socket.open();
+    socket.server({ m: "error", id: 0, d: { message: "invalid frame" } });
+    const settled = vi.fn();
+    void pending.then(settled, settled);
+    await Promise.resolve();
+    expect(settled).not.toHaveBeenCalled();
+    socket.server({ m: "ls", id: socket.sent[0].id, d: {} });
+    await pending;
   });
 
   it("times out with a typed error and forgets the request", async () => {

@@ -4,6 +4,11 @@ import { NodeType, ReaderNodeMode, DType, FilterType } from "~/types/enums";
 import { createDefaultNodes, createNode } from "~/lib/nodes";
 import type { LocalText } from "~/lib/i18n";
 import { storage } from "~/lib/storage";
+import {
+  deleteDiskPreset,
+  listDiskPresets,
+  writeDiskPreset,
+} from "~/lib/presets-disk";
 
 export interface ConfigPreset {
   id: string;
@@ -141,6 +146,87 @@ export const restoreStockPresets = () => {
 const writeUserPresets = (list: ConfigPreset[]) =>
   storage.setJson(USER_PRESETS_KEY, list);
 
+// --- the runner's disk -------------------------------------------------------
+
+/** Where the presets stand against the runner's folder: `off` = the runner has
+ * none configured, `failed` = it could not be reached (or answered badly). */
+export type PresetsDisk = "idle" | "syncing" | "synced" | "off" | "failed";
+
+let disk = signal<PresetsDisk>("idle");
+export const presetsDisk = (): PresetsDisk => disk;
+
+/** Presets deleted here that the disk may still hold: a delete that could not
+ * reach the runner must not be undone by the next sync reading the file back. */
+const DELETED_KEY = "reline-web:presets:deleted";
+const readDeleted = (): string[] => readList(DELETED_KEY);
+const writeDeleted = (ids: string[]) => {
+  if (ids.length === 0) storage.remove(DELETED_KEY);
+  else storage.setJson(DELETED_KEY, ids);
+};
+
+const isUserId = (id: string): boolean => id.startsWith("user-");
+
+/**
+ * Bring the presets and the runner's folder together: what the disk has is
+ * added here (its copy wins for the same id), what only this browser has is
+ * written to the disk, and what was deleted here is removed from it. Presets
+ * the runner cannot read are left alone — never overwritten.
+ *
+ * Idempotent and safe to repeat; saves and deletes made afterwards go to the
+ * disk as they happen (`synced`) until a request fails (`failed`).
+ */
+export const syncPresets = async (): Promise<void> => {
+  if (disk === "syncing") return;
+  disk = "syncing";
+  try {
+    const remote = await listDiskPresets();
+    if (!remote.enabled) {
+      disk = "off";
+      return;
+    }
+    const deleted = new Set(readDeleted());
+    const onDisk = new Set(remote.presets.map((preset) => preset.id));
+    const occupied = new Set(remote.skipped);
+
+    const merged = loadUserPresets().filter(
+      (preset) => !deleted.has(preset.id),
+    );
+    for (const preset of remote.presets) {
+      if (!isUserId(preset.id) || deleted.has(preset.id)) continue;
+      const at = merged.findIndex((item) => item.id === preset.id);
+      if (at === -1) merged.push(preset);
+      else merged[at] = preset;
+    }
+    writeUserPresets(merged);
+    userPresets = merged;
+
+    await Promise.all([
+      ...merged
+        .filter(
+          (preset) =>
+            !onDisk.has(preset.id) && !occupied.has(`${preset.id}.json`),
+        )
+        .map(writeDiskPreset),
+      ...[...deleted]
+        .filter((id) => onDisk.has(id))
+        .map((id) => deleteDiskPreset(id)),
+    ]);
+    writeDeleted([]);
+    disk = "synced";
+  } catch {
+    disk = "failed";
+  }
+};
+
+/** A change made after a sync goes to the disk right away; before one (no
+ * runner known) or after a failure there is nothing to send it to. */
+const toDisk = (task: () => Promise<void>) => {
+  if (disk !== "synced") return;
+  task().catch(() => {
+    disk = "failed";
+  });
+};
+
 export const saveUserPreset = (
   name: string,
   nodes: readonly StackNode[],
@@ -149,22 +235,30 @@ export const saveUserPreset = (
     id: `user-${Date.now()}`,
     name,
     description: "panel.presets.description.user",
-    // JSON round-trip: store items are Solid proxies — structuredClone throws on them
+    // JSON round-trip: store items are reactive proxies, not plain objects
     nodes: JSON.parse(JSON.stringify([...nodes])),
   };
   const list = loadUserPresets();
   list.push(preset);
   writeUserPresets(list);
   userPresets = list;
+  toDisk(() => writeDiskPreset(preset));
   return preset;
 };
 
 /** Deletes a user preset; stock presets are only hidden (recoverable). */
 export const deletePreset = (id: string) => {
-  if (id.startsWith("user-")) {
+  if (isUserId(id)) {
     const list = loadUserPresets().filter((p) => p.id !== id);
     writeUserPresets(list);
     userPresets = list;
+    // remembered until the disk confirms, so a failed delete is retried by the
+    // next sync instead of the file coming back as a "new" preset
+    writeDeleted([...new Set([...readDeleted(), id])]);
+    toDisk(async () => {
+      await deleteDiskPreset(id);
+      writeDeleted(readDeleted().filter((item) => item !== id));
+    });
     return;
   }
   const hidden = Array.from(new Set([...hiddenStock, id]));

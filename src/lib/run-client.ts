@@ -9,6 +9,13 @@ import {
   type Connection,
   type Frame,
 } from "~/lib/ws";
+import {
+  isFinalLinkState,
+  probeLink,
+  type LinkProbe,
+  type LinkState,
+} from "~/lib/link-probe";
+import { setLinkReport } from "~/lib/link-status";
 
 export type RunPhase =
   | "idle"
@@ -188,14 +195,28 @@ const doneMessage = (
   };
 };
 
-/** How many times a lost connection is retried before the run is given up on.
- * Four retries after a drop: 1 s + 2 s + 4 s + 8 s of trying. */
-const RECONNECT_ATTEMPTS = 4;
-/** Backoff between retries. Long enough for a tunnel or a proxy to come back,
- * short enough that the user watches it happen instead of reopening the tab. */
+/** Backoff between redials: 1 s, 2 s, 4 s, 8 s, then every 10 s. Long enough
+ * for a tunnel or a proxy to come back, short enough that the user watches it
+ * happen instead of reopening the tab. */
 const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 10_000;
+/** How long a run we are following is waited for. A run is hours of work on the
+ * server and a tunnel that restarts is minutes; four attempts over fifteen
+ * seconds used to give up on a perfectly healthy run. */
+const RECONNECT_WINDOW_RUN_MS = 10 * 60_000;
+/** How long a dial that never reached the runner is retried: a typo or a dead
+ * address should say so soon, not after ten minutes of "reconnecting". */
+const RECONNECT_WINDOW_DIAL_MS = 30_000;
+/** The link is asked about from the second failed attempt on: the first retry
+ * is for a blip and costs nothing, a second failure deserves a diagnosis. */
+const PROBE_FROM_ATTEMPT = 2;
 
-export const createRunClient = (): RunClient => {
+/** Journal lines for retries are thinned out — ten minutes of every-ten-second
+ * retries would push the lines that matter out of the capped journal. */
+const logsAttempt = (attempt: number): boolean =>
+  attempt <= 3 || attempt % 6 === 0;
+
+export const createRunClient = (probe: LinkProbe = probeLink): RunClient => {
   let conn: Connection | undefined;
   let stopWatchdog: number | undefined;
   let retryTimer: number | undefined;
@@ -204,6 +225,10 @@ export const createRunClient = (): RunClient => {
   let ticket = 0;
   /** Retries spent on the current drop; reset by a successful `onopen`. */
   let attempt = 0;
+  /** When the current drop began; the retry window is measured from here. */
+  let droppedAt: number | undefined;
+  /** What the link last said, so a change is journaled and a repeat is not. */
+  let lastLink: LinkState | undefined;
   /** What the open socket is for: a fresh `start`, or watching a known run. */
   let watchMode: "start" | "recover" = "start";
   /** The run as the user asked for it, so a reconnect can resume it. */
@@ -255,6 +280,8 @@ export const createRunClient = (): RunClient => {
     window.clearTimeout(retryTimer);
     runPipeline = undefined;
     attempt = 0;
+    droppedAt = undefined;
+    lastLink = undefined;
     closeSocket();
     window.clearTimeout(stopWatchdog);
     phase = "idle";
@@ -300,34 +327,90 @@ export const createRunClient = (): RunClient => {
     return true;
   };
 
+  /** How long the link was waited for, as a localised duration. */
+  const waited = (ms: number): LocalText =>
+    ms >= 60_000
+      ? message("run.duration.minutes", {
+          value: String(Math.round(ms / 60_000)),
+        })
+      : message("run.duration.seconds", {
+          value: String(Math.round(ms / 1000)),
+        });
+
+  /** The link's state as words, for a journal line. A descriptor, not a string:
+   * a string parameter is printed as it is, and the journal must follow the
+   * language. */
+  const linkText = (state: LinkState | undefined) =>
+    message(state === undefined ? "link.unchecked" : `link.state.${state}`);
+
+  /** One retry: ask the link what is wrong (from the second failure on), stop
+   * for good when the answer is final — a link that was never published or has
+   * expired does not come back by waiting — and dial otherwise. */
+  const retry = async (mine: number) => {
+    if (attempt >= PROBE_FROM_ATTEMPT) {
+      const report = await probe(runUrl);
+      // the run ended, or a newer dial began, while the question was out
+      if (mine !== ticket) return;
+      setLinkReport(report);
+      if (report.state !== lastLink) {
+        lastLink = report.state;
+        log(
+          "info",
+          message("run.linkState", { state: linkText(report.state) }),
+        );
+      }
+      if (isFinalLinkState(report.state)) {
+        finish(
+          "error",
+          message("run.linkLost", {
+            state: linkText(report.state),
+            hint: message(`link.hint.${report.state}`),
+          }),
+        );
+        return;
+      }
+    }
+    connect();
+  };
+
   /** Dial the server and ask where the run stands. The job survives a dead
    * socket on the server (WS_API.md), so a reconnect is `status` → `attach`,
    * never a second `start`: repeating the config would write the outputs
    * twice and earn `worker busy` anyway.
    *
-   * Bounded: after `RECONNECT_ATTEMPTS` the run ends with one honest journal
-   * line instead of a retry loop nobody can see the end of. */
+   * Bounded by time, not by a count: a followed run is waited for ten minutes,
+   * a dial that never reached the runner thirty seconds. Then the run ends with
+   * one honest journal line naming what the link last said. */
   const reconnect = (reason?: LocalText) => {
     if (runId === undefined && runPipeline === undefined) return;
     if (reason !== undefined) log("info", reason);
-    if (attempt >= RECONNECT_ATTEMPTS) {
-      finish("error", message("run.reconnectFailed", { url: runUrl }));
+    const now = Date.now();
+    droppedAt ??= now;
+    const budget =
+      runId !== undefined ? RECONNECT_WINDOW_RUN_MS : RECONNECT_WINDOW_DIAL_MS;
+    if (now - droppedAt >= budget) {
+      const state = linkText(lastLink);
+      finish(
+        "error",
+        runId !== undefined
+          ? message("run.reconnectFailed", {
+              url: runUrl,
+              state,
+              time: waited(now - droppedAt),
+            })
+          : message("run.dialFailed", { url: runUrl, state }),
+      );
       return;
     }
     attempt += 1;
     phase = runId !== undefined ? "recovering" : "connecting";
-    log(
-      "info",
-      message("run.reconnecting", {
-        attempt: String(attempt),
-        total: String(RECONNECT_ATTEMPTS),
-      }),
-    );
+    if (logsAttempt(attempt))
+      log("info", message("run.reconnecting", { attempt: String(attempt) }));
     window.clearTimeout(retryTimer);
-    // 1 s, 2 s, 4 s, 8 s
+    const mine = ticket;
     retryTimer = window.setTimeout(
-      connect,
-      RECONNECT_BASE_MS * 2 ** (attempt - 1),
+      () => void retry(mine),
+      Math.min(RECONNECT_BASE_MS * 2 ** (attempt - 1), RECONNECT_MAX_MS),
     );
   };
 
@@ -458,6 +541,8 @@ export const createRunClient = (): RunClient => {
           if (!current()) return;
           if (attempt > 0) log("info", "run.reconnected");
           attempt = 0;
+          droppedAt = undefined;
+          lastLink = undefined;
           if (watchMode === "recover") phase = "recovering";
           else phase = "running";
           hello();
@@ -473,7 +558,13 @@ export const createRunClient = (): RunClient => {
           // and logged nothing.
           // A silent socket is not necessarily a dead run: reconnect dials
           // again instead of ending the run here.
-          reconnect(reason === "silent" ? "run.echoLost" : undefined);
+          reconnect(
+            reason === "silent"
+              ? "run.echoLost"
+              : reason === "timeout"
+                ? "run.dialTimeout"
+                : undefined,
+          );
         },
         badFrame: () => {
           if (current()) finish("error", "run.badFrame");
@@ -506,6 +597,8 @@ export const createRunClient = (): RunClient => {
     runPipeline = pipeline;
     rememberRun(undefined);
     attempt = 0;
+    droppedAt = undefined;
+    lastLink = undefined;
     connect();
     return true;
   };
@@ -523,6 +616,8 @@ export const createRunClient = (): RunClient => {
     else if (runId === undefined) rememberRun(storedRunId());
     progress = undefined;
     attempt = 0;
+    droppedAt = undefined;
+    lastLink = undefined;
     connect();
   };
 
