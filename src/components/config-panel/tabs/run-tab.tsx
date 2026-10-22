@@ -181,7 +181,7 @@ export const RunTab: Component = () => {
       <div
         class={styles.runLink}
         data-tone={link() === undefined ? "none" : linkTone(link()!.state)}
-        role="status"
+        attr:role="status"
       >
         <span class={styles.runLinkDot} aria-hidden="true" />
         <div class={styles.runLinkText}>
